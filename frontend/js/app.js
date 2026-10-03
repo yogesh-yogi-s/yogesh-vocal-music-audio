@@ -72,7 +72,7 @@ function tick() { clearInterval(state.timer); state.timer = setInterval(() => { 
 function updateTime() { const duration = state.meta?.duration_seconds || 0; $('time').textContent = `${fmtTime(state.position)} / ${fmtTime(duration)}`; }
 function escapeHtml(value) { const node = document.createElement('span'); node.textContent = value; return node.innerHTML; }
 $('play').addEventListener('click', start); $('pause').addEventListener('click', pause); $('stop').addEventListener('click', stop);
-$('seek').addEventListener('input', (event) => { state.position = +event.target.value; if (state.playing) { clearSources(); state.playing = false; start(); } updateTime(); });
+$('seek').addEventListener('change', (event) => { state.position = +event.target.value; if (state.playing) { clearSources(); state.playing = false; start(); } updateTime(); });
 ['master-volume', 'vocal-volume', 'music-volume'].forEach((id) => $(id).addEventListener('input', syncGains));
 ['vocal', 'music'].forEach((kind) => $(`${kind}-mute`).addEventListener('click', () => { state.muted[kind] = !state.muted[kind]; $(`${kind}-mute`).textContent = state.muted[kind] ? `Unmute ${kind}` : `Mute ${kind}`; syncGains(); }));
 ['vocal', 'music', 'all'].forEach((kind) => $(`extract-${kind}`).addEventListener('click', (event) => { if (!state.session) return; status('extract-status', `Preparing ${kind === 'all' ? 'both tracks' : `${kind} track`} download…`); window.setTimeout(() => status('extract-status', 'Download started.'), 250); }));

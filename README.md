@@ -1,6 +1,6 @@
 # VMA
 
-VMA v0.1 (Vocal Music Audio) is a lossless container for storing two separate audio streams: a Vocal stream and a Music / Instrumental stream. The streams can be played synchronously with independent controls in the local web application, then extracted again as the original stored audio.
+VMA v0.2 (Vocal Music Audio) is a lossless container for storing two separate audio streams: a Vocal stream and a Music / Instrumental stream. The streams can be played synchronously with independent controls in the local web application, then extracted again as the original stored audio. The binary format remains VMA Version 1; v0.2 files remain readable by v0.1 readers.
 
 ## What VMA Does
 
@@ -63,7 +63,11 @@ Open [http://127.0.0.1:8000](http://127.0.0.1:8000) in a browser. Uploads are li
 
 ### Playback
 
-Use **Play**, **Pause**, **Stop**, and the playback-position control to navigate the synchronized streams.
+Use **Play**, **Pause**, **Stop**, and the playback-position control to navigate the synchronized streams. Seeking is committed when the position control change is completed; dragging does not continuously recreate the synchronized Web Audio sources.
+
+### Start offsets
+
+The library and both create endpoint families accept optional `vocal_start_sample` and `music_start_sample` values. They are native-rate frame offsets on the shared playback timeline and default to `0`. Negative values are rejected by the existing validation and returned through the endpoint's normal error handling.
 
 ### Independent stream controls
 
@@ -92,14 +96,14 @@ FastAPI provides interactive documentation at [http://127.0.0.1:8000/docs](http:
 | Method | Endpoint | Purpose |
 |---|---|---|
 | GET | `/api/health` | Returns the local service health status. |
-| POST | `/api/vma/create` | Packages multipart `vocal` and `music` PCM WAV uploads into `song.vma`. Optional `title` and `artist` fields are accepted. |
+| POST | `/api/vma/create` | Packages multipart `vocal` and `music` PCM WAV uploads into `song.vma`. Optional `title`, `artist`, `vocal_start_sample`, and `music_start_sample` fields are accepted. |
 | POST | `/api/vma/validate` | Validates a multipart VMA `file` and returns validation/stream metadata. |
 | POST | `/api/vma/info` | Returns metadata and stream properties for a multipart VMA `file`. |
 | POST | `/api/vma/extract/vocal` | Returns the stored Vocal stream from a multipart VMA `file` as WAV. |
 | POST | `/api/vma/extract/music` | Returns the stored Music / Instrumental stream from a multipart VMA `file` as WAV. |
 | POST | `/api/vma/extract/all` | Returns both stored streams from a multipart VMA `file` as a ZIP archive. |
 
-The browser workflow also uses session-scoped routes internally: `POST /api/create`, `POST /api/open`, `GET /api/vma/{session_id}`, `GET /api/vma/{session_id}/stream/{kind}`, `GET /api/vma/{session_id}/extract/{kind}`, and `GET /api/vma/{session_id}/extract-all`.
+The browser workflow also uses session-scoped routes internally: `POST /api/create`, `POST /api/open`, `GET /api/vma/{session_id}`, `GET /api/vma/{session_id}/stream/{kind}`, `GET /api/vma/{session_id}/extract/{kind}`, and `GET /api/vma/{session_id}/extract-all`. `POST /api/create` accepts the same optional start-sample fields.
 
 Example: create a VMA through the programmatic API.
 
@@ -115,7 +119,7 @@ Run the complete automated suite:
 python -m pytest -q
 ```
 
-Current verified state: **65 tests passing, 0 failed, 0 skipped**.
+Current verified state: **106 tests passing, 0 failed, 0 skipped, 0 errors**.
 
 The suite covers:
 
@@ -123,6 +127,7 @@ The suite covers:
 - Equal and different stream durations.
 - Sample-rate mismatch and mono/stereo channel mismatch.
 - VMA start-sample offset behavior.
+- Focused malformed-input mutation coverage for the WAV parser.
 - Corruption and truncation validation.
 - Exact PCM lossless round trips.
 - FastAPI integration.
@@ -141,7 +146,12 @@ When importing from the repository root, add `backend` to `PYTHONPATH` or instal
 ```python
 from vma import create_vma, read_vma, extract_vocal, extract_music, extract_all, validate_vma
 
-create_vma("vocal.wav", "music.wav", "song.vma", {"title": "Song", "artist": "Artist"})
+create_vma(
+	"vocal.wav", "music.wav", "song.vma",
+	{"title": "Song", "artist": "Artist"},
+	vocal_start_sample=0,
+	music_start_sample=0,
+)
 info = read_vma("song.vma")
 extract_vocal("song.vma", "vocal.wav")
 ```

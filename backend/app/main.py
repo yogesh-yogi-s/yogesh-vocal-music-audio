@@ -21,7 +21,6 @@ from backend.vma.models import StreamType, VMAError
 from backend.app import vma_service
 
 logger = logging.getLogger(__name__)
-MAX_UPLOAD_BYTES = 500 * 1024 * 1024
 SESSION_TTL_SECONDS = 2 * 60 * 60
 ROOT = Path(__file__).resolve().parents[2]
 FRONTEND = ROOT / "frontend"
@@ -55,13 +54,20 @@ async def api_create_vma(
     music: UploadFile = File(..., description="Uncompressed PCM Music WAV"),
     title: str = Form(""),
     artist: str = Form(""),
+    vocal_start_sample: int = Form(0),
+    music_start_sample: int = Form(0),
 ):
     directory = Path(tempfile.mkdtemp(prefix="vma-create-"))
     try:
         vocal_path = await vma_service.store_upload(vocal, directory / "vocal-input.wav")
         music_path = await vma_service.store_upload(music, directory / "music-input.wav")
         output = directory / "song.vma"
-        container = vma_service.create_container(vocal_path, music_path, output, title=title, artist=artist)
+        container = vma_service.create_container(
+            vocal_path, music_path, output,
+            title=title, artist=artist,
+            vocal_start_sample=vocal_start_sample,
+            music_start_sample=music_start_sample,
+        )
         return FileResponse(
             output,
             media_type="application/vnd.vma",
@@ -170,15 +176,22 @@ async def create_container(
     music: UploadFile = File(...),
     title: str = Form(""),
     artist: str = Form(""),
+    vocal_start_sample: int = Form(0),
+    music_start_sample: int = Form(0),
 ):
     job = _job_directory(request)
     try:
-        vocal_path = await _store_upload(vocal, job / "vocal-input.wav")
-        music_path = await _store_upload(music, job / "music-input.wav")
+        vocal_path = await vma_service.store_upload(vocal, job / "vocal-input.wav")
+        music_path = await vma_service.store_upload(music, job / "music-input.wav")
         # Parse now so technical input errors reach the user before container writing.
         parse_pcm_wav(vocal_path)
         parse_pcm_wav(music_path)
-        output = create_vma(vocal_path, music_path, job / "song.vma", {"title": title, "artist": artist})
+        output = create_vma(
+            vocal_path, music_path, job / "song.vma",
+            {"title": title, "artist": artist},
+            vocal_start_sample=vocal_start_sample,
+            music_start_sample=music_start_sample,
+        )
         return FileResponse(
             output,
             media_type="application/vnd.vma",
@@ -201,7 +214,7 @@ async def create_container(
 async def open_container(request: Request, file: UploadFile = File(...)):
     job = _job_directory(request)
     try:
-        vma_path = await _store_upload(file, job / "song.vma")
+        vma_path = await vma_service.store_upload(file, job / "song.vma")
         container = read_vma(vma_path)
         return _container_payload(container, job.name)
     except VMAError as exc:
@@ -257,22 +270,6 @@ def _job_directory(request: Request) -> Path:
     job = request.app.state.storage / uuid.uuid4().hex
     job.mkdir(parents=True, exist_ok=False)
     return job
-
-
-async def _store_upload(upload: UploadFile, destination: Path) -> Path:
-    total = 0
-    with destination.open("wb") as output:
-        while chunk := await upload.read(1024 * 1024):
-            total += len(chunk)
-            if total > MAX_UPLOAD_BYTES:
-                output.close()
-                destination.unlink(missing_ok=True)
-                raise HTTPException(413, "uploads are limited to 500 MB each")
-            output.write(chunk)
-    if total == 0:
-        destination.unlink(missing_ok=True)
-        raise HTTPException(400, "uploaded file is empty")
-    return destination
 
 
 def _session_path(request: Request, session_id: str) -> Path:

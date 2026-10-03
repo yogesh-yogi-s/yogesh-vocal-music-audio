@@ -31,8 +31,24 @@ async def store_upload(upload: UploadFile, destination: Path) -> Path:
     return destination
 
 
-def create_container(vocal_path: Path, music_path: Path, output_path: Path, *, title: str, artist: str) -> VMAFile:
-    create_vma(vocal_path, music_path, output_path, {"title": title, "artist": artist})
+def create_container(
+    vocal_path: Path,
+    music_path: Path,
+    output_path: Path,
+    *,
+    title: str,
+    artist: str,
+    vocal_start_sample: int = 0,
+    music_start_sample: int = 0,
+) -> VMAFile:
+    create_vma(
+        vocal_path,
+        music_path,
+        output_path,
+        {"title": title, "artist": artist},
+        vocal_start_sample=vocal_start_sample,
+        music_start_sample=music_start_sample,
+    )
     return read_vma(output_path)
 
 

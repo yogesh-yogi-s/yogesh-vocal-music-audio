@@ -1,6 +1,6 @@
 # VMA v0.1 binary format
 
-VMA is a little-endian, lossless audio container. Version 1 stores two raw PCM streams: one Vocal and one Music stream. It is a container, not an audio codec.
+VMA is a little-endian, lossless audio container. Version 1 stores two raw PCM streams: one Vocal and one Music stream. It is a container, not an audio codec. The v0.2 library and API behavior uses this same Version 1 format; it does not add fields or change the binary layout. VMA v0.2 files remain readable by v0.1 readers.
 
 ## File layout
 
@@ -52,7 +52,7 @@ Metadata is a UTF-8 encoded JSON object. v0.1 writers use `title`, `artist`, `vo
 
 ## Synchronization
 
-The playback start time for a stream is `start_sample / sample_rate`. A stream duration is `sample_count / sample_rate`. A mixer schedules each stream against the same clock at its start time. This permits different native sample rates without resampling the stored source data. v0.1 creation writes zero start samples, but readers must accept non-negative offsets.
+The playback start time for a stream is `start_sample / sample_rate`. A stream duration is `sample_count / sample_rate`. A mixer schedules each stream against the same clock at its start time. This permits different native sample rates without resampling the stored source data. Start samples default to zero; v0.2 creation may write non-negative vocal and music offsets independently. The existing stream-entry field carries these values, so the layout and Version 1 compatibility are unchanged.
 
 ## Required validation
 

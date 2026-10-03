@@ -22,3 +22,5 @@ def test_frontend_script_handles_api_errors_work_states_and_shared_playback_cloc
     assert "Select a VMA file before opening it" in script
     assert "X-VMA-Session" in script
     assert "source.start(when, offset)" in script
+    assert "$('seek').addEventListener('change'" in script
+    assert "$('seek').addEventListener('input'" not in script

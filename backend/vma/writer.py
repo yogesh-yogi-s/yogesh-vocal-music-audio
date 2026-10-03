@@ -11,8 +11,25 @@ from .format import HEADER_SIZE, HEADER_STRUCT, MAGIC, STREAM_ENTRY_SIZE, STREAM
 from .models import Codec, StreamType, VMAError
 
 
-def create_vma(vocal_path: str | Path, music_path: str | Path, output_path: str | Path, metadata: dict[str, Any] | None = None) -> Path:
-    """Create a VMA v0.1 file from two strict PCM WAV files."""
+def create_vma(
+    vocal_path: str | Path,
+    music_path: str | Path,
+    output_path: str | Path,
+    metadata: dict[str, Any] | None = None,
+    *,
+    vocal_start_sample: int = 0,
+    music_start_sample: int = 0,
+) -> Path:
+    """Create a VMA v0.1 file from two strict PCM WAV files.
+
+    vocal_start_sample and music_start_sample are non-negative frame offsets
+    on the shared playback timeline.  Both default to 0, preserving the v0.1
+    behaviour for all existing callers.
+    """
+    if vocal_start_sample < 0:
+        raise VMAError("vocal_start_sample must be >= 0")
+    if music_start_sample < 0:
+        raise VMAError("music_start_sample must be >= 0")
     vocal_path, music_path, output_path = map(Path, (vocal_path, music_path, output_path))
     vocal, music = parse_pcm_wav(vocal_path), parse_pcm_wav(music_path)
     user_metadata = metadata or {}
@@ -35,17 +52,17 @@ def create_vma(vocal_path: str | Path, music_path: str | Path, output_path: str 
     with output_path.open("wb") as output:
         output.write(HEADER_STRUCT.pack(MAGIC, VERSION, 0, header_size, 2, len(metadata_bytes), STREAM_ENTRY_SIZE, 0))
         output.write(metadata_bytes)
-        output.write(_entry(1, StreamType.VOCAL, vocal.audio, vocal_offset, vocal.data_size))
-        output.write(_entry(2, StreamType.MUSIC, music.audio, music_offset, music.data_size))
+        output.write(_entry(1, StreamType.VOCAL, vocal.audio, vocal_offset, vocal.data_size, vocal_start_sample))
+        output.write(_entry(2, StreamType.MUSIC, music.audio, music_offset, music.data_size, music_start_sample))
         _copy_region(vocal_path, vocal.data_offset, vocal.data_size, output)
         _copy_region(music_path, music.data_offset, music.data_size, output)
     return output_path
 
 
-def _entry(stream_id, stream_type, audio, data_offset, data_size) -> bytes:
+def _entry(stream_id, stream_type, audio, data_offset, data_size, start_sample: int = 0) -> bytes:
     return STREAM_STRUCT.pack(
         stream_id, int(stream_type), int(Codec.PCM_WAV_LE), audio.sample_rate, audio.channels,
-        audio.bit_depth, 0, audio.sample_count, data_offset, data_size, b"\0" * 16,
+        audio.bit_depth, start_sample, audio.sample_count, data_offset, data_size, b"\0" * 16,
     )
 
 
