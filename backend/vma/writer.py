@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from .audio import parse_pcm_wav
-from .format import HEADER_SIZE, HEADER_STRUCT, MAGIC, STREAM_ENTRY_SIZE, STREAM_STRUCT, VERSION
+from .format import HEADER_SIZE, HEADER_STRUCT, MAGIC, MAX_METADATA_SIZE, STREAM_ENTRY_SIZE, STREAM_STRUCT, VERSION
 from .models import Codec, StreamType, VMAError
 
 
@@ -43,6 +43,8 @@ def create_vma(
         "created_utc": datetime.now(UTC).isoformat(),
     }
     metadata_bytes = json.dumps(info, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    if len(metadata_bytes) > MAX_METADATA_SIZE:
+        raise VMAError("VMA metadata exceeds the safety limit")
     header_size = HEADER_SIZE + len(metadata_bytes) + 2 * STREAM_ENTRY_SIZE
     vocal_offset = header_size
     music_offset = vocal_offset + vocal.data_size

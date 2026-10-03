@@ -4,12 +4,24 @@ import pytest
 
 from conftest import discover_audio_fixture_cases
 from vma import create_vma, read_vma
-from vma.format import HEADER_SIZE, HEADER_STRUCT, MAGIC, STREAM_ENTRY_SIZE, STREAM_STRUCT, VERSION
-from vma.models import Codec, StreamType
+from vma.format import HEADER_SIZE, HEADER_STRUCT, MAGIC, MAX_METADATA_SIZE, STREAM_ENTRY_SIZE, STREAM_STRUCT, VERSION
+from vma.models import Codec, StreamType, VMAError
 from vma_test_support import assert_stream_matches_wav
 
 
 CASES = discover_audio_fixture_cases()
+
+
+def _title_for_metadata_size(vocal_path, music_path, size):
+    fixed = {
+        "title": "",
+        "artist": "",
+        "vocal_filename": vocal_path.name,
+        "music_filename": music_path.name,
+        "created_utc": "0" * 32,
+    }
+    base_size = len(json.dumps(fixed, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+    return "x" * (size - base_size)
 
 
 @pytest.mark.parametrize("case", CASES, ids=lambda case: case.name)
@@ -41,3 +53,23 @@ def test_vma_writer_encodes_documented_header_and_stream_table(tmp_path, case):
         )
         previous_end = offset + size
     assert previous_end == len(raw)
+
+
+def test_vma_writer_accepts_metadata_at_documented_limit(tmp_path, wav_pair):
+    vocal, music, _, _ = wav_pair
+    title = _title_for_metadata_size(vocal, music, MAX_METADATA_SIZE)
+    output = create_vma(vocal, music, tmp_path / "metadata-limit.vma", {"title": title})
+
+    raw = output.read_bytes()
+    assert HEADER_STRUCT.unpack_from(raw)[5] == MAX_METADATA_SIZE
+    assert read_vma(output).metadata["title"] == title
+
+
+def test_vma_writer_rejects_metadata_above_documented_limit(tmp_path, wav_pair):
+    vocal, music, _, _ = wav_pair
+    title = _title_for_metadata_size(vocal, music, MAX_METADATA_SIZE + 1)
+    output = tmp_path / "metadata-too-large.vma"
+
+    with pytest.raises(VMAError, match="metadata"):
+        create_vma(vocal, music, output, {"title": title})
+    assert not output.exists()
