@@ -1,6 +1,11 @@
 # VMA
 
-VMA v0.2 (Vocal Music Audio) is a lossless container for storing two separate audio streams: a Vocal stream and a Music / Instrumental stream. The streams can be played synchronously with independent controls in the local web application, then extracted again as the original stored audio. The binary format remains VMA Version 1; v0.2 files remain readable by v0.1 readers.
+VMA (Vocal Music Audio) is a versioned binary container for audio streams and an accompanying library and local web application.
+
+The current application release is **v0.3**. The binary container is available in two versions:
+
+- **VMA Version 1** — PCM WAV–only, two-stream (Vocal + Music) container. The application and API are fully V1-based.
+- **VMA Version 2** — Format-agnostic opaque byte container. Stores any supplied source file byte-for-byte. V2 is a library-layer capability; no application or API V2 workflow exists yet.
 
 ## What VMA Does
 
@@ -19,7 +24,7 @@ VMA is a container format, not an AI source-separation system. It packages audio
 
 If you only have one already-mixed MP3 or WAV containing Vocal and Music / Instrumental together, VMA cannot losslessly recover the original separate stems. That distinction is between containerization and source separation: VMA stores supplied streams; it does not infer missing streams from a mix.
 
-## Supported v0.1 Input
+## Supported V1 Input (application and API)
 
 | Property | Supported value |
 |---|---|
@@ -30,7 +35,7 @@ If you only have one already-mixed MP3 or WAV containing Vocal and Music / Instr
 | Streams per VMA | Exactly two |
 | Stream types | Vocal and Music / Instrumental |
 
-VMA v0.1 stores raw PCM WAV data chunks in a versioned, little-endian container. It does not use a custom audio codec or resample source streams during packaging.
+VMA v1 stores raw PCM WAV data chunks in a versioned, little-endian container. It does not use a custom audio codec or resample source streams during packaging.
 
 ## Run Locally
 
@@ -119,17 +124,20 @@ Run the complete automated suite:
 python -m pytest -q
 ```
 
-Current verified state: **106 tests passing, 0 failed, 0 skipped, 0 errors**.
+Current verified state: **265 tests passing, 0 failed, 0 skipped, 0 errors**.
 
 The suite covers:
 
 - All eight synthetic audio fixture groups.
 - Equal and different stream durations.
 - Sample-rate mismatch and mono/stereo channel mismatch.
-- VMA start-sample offset behavior.
+- VMA V1 start-sample offset behavior.
 - Focused malformed-input mutation coverage for the WAV parser.
 - Corruption and truncation validation.
 - Exact PCM lossless round trips.
+- VMA V2 header, descriptor, TLV, extraction, and dispatch tests.
+- FORMAT_ID registry range classification, allocation governance, and append-only rules.
+- RIFF/WAV format recognition (signature-only; no PCM decoding).
 - FastAPI integration.
 - Frontend contract checks.
 
@@ -147,16 +155,31 @@ When importing from the repository root, add `backend` to `PYTHONPATH` or instal
 from vma import create_vma, read_vma, extract_vocal, extract_music, extract_all, validate_vma
 
 create_vma(
-	"vocal.wav", "music.wav", "song.vma",
-	{"title": "Song", "artist": "Artist"},
-	vocal_start_sample=0,
-	music_start_sample=0,
+    "vocal.wav", "music.wav", "song.vma",
+    {"title": "Song", "artist": "Artist"},
+    vocal_start_sample=0,
+    music_start_sample=0,
 )
 info = read_vma("song.vma")
 extract_vocal("song.vma", "vocal.wav")
 ```
 
+## Library Architecture
+
+The `backend/vma/` package is structured in isolated layers:
+
+| Layer | Module | Responsibility |
+|---|---|---|
+| **V1 container** | `vma/` | Frozen. PCM WAV–only writer, reader, extractor, validator. |
+| **V2 container** | `vma/v2/` | Frozen. Format-agnostic byte writer, reader, extractor, dispatcher. |
+| **Format registry** | `vma/formats/` | FORMAT_ID registry, format recognition API, RIFF/WAV recognizer. |
+| **Dispatcher** | `vma/dispatch.py` | `read_vma_any()` — routes V1/V2 by version field. |
+
+V1 and V2 are entirely separate parsing stacks. V2 does not depend on V1 models. The format registry does not modify V1 or V2 bytes. Recognition is identity-only; decoding and playback are not part of any layer above.
+
 ## Technical Documentation
 
-- [VMA format specification](docs/VMA_FORMAT.md) defines the VMA v0.1 binary layout, fields, synchronization model, codec identifier, and validation requirements.
-- [Architecture overview](docs/ARCHITECTURE.md) describes the frontend, FastAPI, VMA library, temporary storage, extraction, and synchronized Web Audio playback flow.
+- [VMA v1 format specification](docs/VMA_FORMAT.md) — V1 binary layout, fields, synchronization model, codec identifier, and validation requirements.
+- [VMA v2 format specification](docs/VMA_FORMAT_V2.md) — V2 binary layout, opaque byte-store contract, FORMAT_ID namespace, TLV FORMAT_INFO, version dispatch, and validation rules.
+- [FORMAT_ID registry](docs/VMA_FORMAT_ID_REGISTRY.md) — Approved FORMAT_ID allocations, range policy, status lifecycle, and governance rules.
+- [Architecture overview](docs/ARCHITECTURE.md) — Frontend, FastAPI, VMA library, temporary storage, extraction, and synchronized Web Audio playback flow.
