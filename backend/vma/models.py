@@ -20,6 +20,16 @@ class Codec(IntEnum):
 
 
 @dataclass(frozen=True)
+class PayloadRange:
+    offset: int
+    size: int
+
+    @property
+    def end(self) -> int:
+        return self.offset + self.size
+
+
+@dataclass(frozen=True)
 class AudioFormat:
     sample_rate: int
     channels: int

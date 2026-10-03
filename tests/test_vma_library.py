@@ -6,7 +6,7 @@ import pytest
 from vma import create_vma, extract_all, extract_music, extract_vocal, read_vma, validate_vma
 from vma.format import HEADER_SIZE, HEADER_STRUCT, STREAM_ENTRY_SIZE, STREAM_STRUCT
 from vma.audio import PCM_SUBFORMAT_GUID
-from vma.models import VMAError
+from vma.models import PayloadRange, VMAError
 
 from conftest import write_pcm_wav
 
@@ -42,6 +42,19 @@ def test_extract_all_and_validation(tmp_path, wav_pair):
     outputs = extract_all(vma, tmp_path / "tracks")
     assert validated.path == vma
     assert [path.name for path in outputs] == ["vocal.wav", "music.wav"]
+
+
+def test_payload_range_preserves_v1_stream_offsets_and_sizes(tmp_path, wav_pair):
+    vocal, music, _, _ = wav_pair
+    container_path = create_vma(vocal, music, tmp_path / "payload-range.vma")
+    container = read_vma(container_path)
+    raw = container_path.read_bytes()
+
+    payloads = [PayloadRange(stream.data_offset, stream.data_size) for stream in container.streams]
+    assert payloads[0].offset == container.streams[0].data_offset
+    assert payloads[0].end == container.streams[0].data_offset + container.streams[0].data_size
+    assert payloads[0].end <= payloads[1].offset
+    assert payloads[1].end == len(raw)
 
 
 def test_pcm_wave_format_extensible_is_accepted(tmp_path):

@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from .format import wav_header
-from .models import StreamType, VMAFile
+from .models import PayloadRange, StreamType, VMAFile
 from .reader import read_vma
 
 
@@ -27,14 +27,15 @@ def extract_all(vma_path: str | Path, output_directory: str | Path) -> tuple[Pat
 
 def _extract(container: VMAFile, stream_type: StreamType, output_path: Path) -> Path:
     stream = container.stream_for(stream_type)
+    payload = PayloadRange(stream.data_offset, stream.data_size)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with container.path.open("rb") as source, output_path.open("wb") as output:
         output.write(wav_header(
             sample_rate=stream.audio.sample_rate, channels=stream.audio.channels,
             bit_depth=stream.audio.bit_depth, data_size=stream.data_size,
         ))
-        source.seek(stream.data_offset)
-        remaining = stream.data_size
+        source.seek(payload.offset)
+        remaining = payload.size
         while remaining:
             block = source.read(min(1024 * 1024, remaining))
             if not block:

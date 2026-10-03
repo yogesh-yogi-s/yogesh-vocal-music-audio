@@ -8,7 +8,7 @@ from typing import Any
 
 from .audio import parse_pcm_wav
 from .format import HEADER_SIZE, HEADER_STRUCT, MAGIC, MAX_METADATA_SIZE, STREAM_ENTRY_SIZE, STREAM_STRUCT, VERSION
-from .models import Codec, StreamType, VMAError
+from .models import Codec, PayloadRange, StreamType, VMAError
 
 
 def create_vma(
@@ -50,28 +50,30 @@ def create_vma(
     music_offset = vocal_offset + vocal.data_size
     if music_offset + music.data_size > 2 * 1024 * 1024 * 1024:
         raise VMAError("VMA file exceeds the v0.1 2 GiB safety limit")
+    vocal_payload = PayloadRange(vocal_offset, vocal.data_size)
+    music_payload = PayloadRange(music_offset, music.data_size)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with output_path.open("wb") as output:
         output.write(HEADER_STRUCT.pack(MAGIC, VERSION, 0, header_size, 2, len(metadata_bytes), STREAM_ENTRY_SIZE, 0))
         output.write(metadata_bytes)
-        output.write(_entry(1, StreamType.VOCAL, vocal.audio, vocal_offset, vocal.data_size, vocal_start_sample))
-        output.write(_entry(2, StreamType.MUSIC, music.audio, music_offset, music.data_size, music_start_sample))
-        _copy_region(vocal_path, vocal.data_offset, vocal.data_size, output)
-        _copy_region(music_path, music.data_offset, music.data_size, output)
+        output.write(_entry(1, StreamType.VOCAL, vocal.audio, vocal_payload, vocal_start_sample))
+        output.write(_entry(2, StreamType.MUSIC, music.audio, music_payload, music_start_sample))
+        _copy_region(vocal_path, PayloadRange(vocal.data_offset, vocal.data_size), output)
+        _copy_region(music_path, PayloadRange(music.data_offset, music.data_size), output)
     return output_path
 
 
-def _entry(stream_id, stream_type, audio, data_offset, data_size, start_sample: int = 0) -> bytes:
+def _entry(stream_id, stream_type, audio, payload: PayloadRange, start_sample: int = 0) -> bytes:
     return STREAM_STRUCT.pack(
         stream_id, int(stream_type), int(Codec.PCM_WAV_LE), audio.sample_rate, audio.channels,
-        audio.bit_depth, start_sample, audio.sample_count, data_offset, data_size, b"\0" * 16,
+        audio.bit_depth, start_sample, audio.sample_count, payload.offset, payload.size, b"\0" * 16,
     )
 
 
-def _copy_region(path: Path, offset: int, size: int, output) -> None:
+def _copy_region(path: Path, payload: PayloadRange, output) -> None:
     with path.open("rb") as source:
-        source.seek(offset)
-        remaining = size
+        source.seek(payload.offset)
+        remaining = payload.size
         while remaining:
             block = source.read(min(1024 * 1024, remaining))
             if not block:

@@ -7,7 +7,7 @@ from .format import (
     HEADER_SIZE, HEADER_STRUCT, MAGIC, MAX_FILE_SIZE, MAX_METADATA_SIZE, MAX_SAMPLE_RATE,
     MAX_STREAMS, STREAM_ENTRY_SIZE, STREAM_STRUCT, SUPPORTED_BIT_DEPTHS, VERSION,
 )
-from .models import AudioFormat, Codec, StreamInfo, StreamType, VMAError, VMAFile
+from .models import AudioFormat, Codec, PayloadRange, StreamInfo, StreamType, VMAError, VMAFile
 
 
 def read_vma(vma_path: str | Path) -> VMAFile:
@@ -67,11 +67,12 @@ def _parse_stream(raw: bytes, header_size: int, file_size: int) -> StreamInfo:
     if start_sample < 0 or sample_count == 0:
         raise VMAError("VMA stream synchronization fields are invalid")
     bytes_per_frame = channels * (bit_depth // 8)
-    if data_size != sample_count * bytes_per_frame:
+    payload = PayloadRange(data_offset, data_size)
+    if payload.size != sample_count * bytes_per_frame:
         raise VMAError("VMA stream data size does not match frame count")
-    if data_offset < header_size or data_offset + data_size > file_size:
+    if payload.offset < header_size or payload.end > file_size:
         raise VMAError("VMA stream data range is outside the file")
-    return StreamInfo(stream_id, stream_type, codec, AudioFormat(sample_rate, channels, bit_depth, sample_count), start_sample, data_offset, data_size)
+    return StreamInfo(stream_id, stream_type, codec, AudioFormat(sample_rate, channels, bit_depth, sample_count), start_sample, payload.offset, payload.size)
 
 
 def _validate_stream_set(streams: tuple[StreamInfo, ...]) -> None:
@@ -79,7 +80,8 @@ def _validate_stream_set(streams: tuple[StreamInfo, ...]) -> None:
         raise VMAError("VMA stream IDs must be unique")
     if {stream.stream_type for stream in streams} != {StreamType.VOCAL, StreamType.MUSIC}:
         raise VMAError("VMA must contain one vocal and one music stream")
-    intervals = sorted((stream.data_offset, stream.data_offset + stream.data_size) for stream in streams)
+    payloads = [PayloadRange(stream.data_offset, stream.data_size) for stream in streams]
+    intervals = sorted((payload.offset, payload.end) for payload in payloads)
     if intervals[0][1] > intervals[1][0]:
         raise VMAError("VMA stream data regions overlap")
 
