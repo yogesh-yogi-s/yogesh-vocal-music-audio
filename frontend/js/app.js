@@ -3,6 +3,7 @@ const $ = (id) => document.getElementById(id);
 const fmtTime = (seconds) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
 
 function status(id, message, error = false) { const node = $(id); node.textContent = message; node.classList.toggle('error', error); }
+function setWorking(form, working, label) { const button = form.querySelector('button[type="submit"]'); button.disabled = working; button.textContent = working ? label : button.dataset.label; form.setAttribute('aria-busy', String(working)); }
 async function responseError(response) { const text = await response.text(); try { const payload = JSON.parse(text); return payload.detail || `Request failed (${response.status})`; } catch { return text.trim() || `Request failed (${response.status})`; } }
 async function describeWav(file) {
   if (!file) return '';
@@ -16,24 +17,37 @@ async function describeWav(file) {
 ['vocal-input', 'music-input'].forEach((id) => $(id).addEventListener('change', async () => { const summaries = await Promise.all([$('vocal-input').files[0], $('music-input').files[0]].map(describeWav)); $('source-info').textContent = summaries.filter(Boolean).join('  |  ') || 'Choose two PCM WAV files.'; }));
 
 $('create-form').addEventListener('submit', async (event) => {
-  event.preventDefault(); status('create-status', 'Creating VMA…'); $('download-vma').classList.add('hidden');
+  event.preventDefault(); const form = event.currentTarget;
+  if (!$('vocal-input').files[0] || !$('music-input').files[0]) { status('create-status', 'Select both a Vocal WAV and a Music WAV before creating VMA.', true); return; }
+  setWorking(form, true, 'Creating VMA…'); status('create-status', 'Creating VMA…'); $('download-vma').classList.add('hidden');
   try {
     const response = await fetch('/api/create', { method: 'POST', body: new FormData(event.target) });
     if (!response.ok) throw new Error(await responseError(response));
     const url = URL.createObjectURL(await response.blob()); const link = $('download-vma');
-    if (link.dataset.url) URL.revokeObjectURL(link.dataset.url); link.href = url; link.dataset.url = url; link.classList.remove('hidden'); status('create-status', 'VMA created successfully.');
-  } catch (error) { status('create-status', error.message, true); }
+    if (link.dataset.url) URL.revokeObjectURL(link.dataset.url); link.href = url; link.dataset.url = url; link.classList.remove('hidden');
+    const session = response.headers.get('X-VMA-Session');
+    if (session) await openSession(session);
+    status('create-status', 'VMA created successfully.');
+  } catch (error) { status('create-status', error.message, true); } finally { setWorking(form, false); }
 });
 
 $('open-form').addEventListener('submit', async (event) => {
-  event.preventDefault(); stop(); status('open-status', 'Validating VMA…');
+  event.preventDefault(); const form = event.currentTarget;
+  if (!$('vma-input').files[0]) { status('open-status', 'Select a VMA file before opening it.', true); return; }
+  stop(); setWorking(form, true, 'Opening VMA…'); status('open-status', 'Validating VMA…');
   try {
     const response = await fetch('/api/open', { method: 'POST', body: new FormData(event.target) });
     if (!response.ok) throw new Error(await responseError(response)); const payload = await response.json();
-    state.session = payload.session_id; state.meta = payload; state.buffers = {}; state.position = 0;
-    showDetails(payload); await loadBuffers(); status('open-status', 'VMA opened and ready to play.');
-  } catch (error) { status('open-status', error.message, true); }
+    await activateVma(payload); status('open-status', 'VMA opened and ready to play.');
+  } catch (error) { status('open-status', error.message, true); } finally { setWorking(form, false); }
 });
+
+async function openSession(session) {
+  const response = await fetch(`/api/vma/${session}`);
+  if (!response.ok) throw new Error(await responseError(response));
+  await activateVma(await response.json());
+}
+async function activateVma(payload) { state.session = payload.session_id; state.meta = payload; state.buffers = {}; state.position = 0; showDetails(payload); await loadBuffers(); }
 
 function showDetails(data) {
   const title = data.metadata.title || 'Untitled'; const artist = data.metadata.artist || '—';
@@ -61,3 +75,5 @@ $('play').addEventListener('click', start); $('pause').addEventListener('click',
 $('seek').addEventListener('input', (event) => { state.position = +event.target.value; if (state.playing) { clearSources(); state.playing = false; start(); } updateTime(); });
 ['master-volume', 'vocal-volume', 'music-volume'].forEach((id) => $(id).addEventListener('input', syncGains));
 ['vocal', 'music'].forEach((kind) => $(`${kind}-mute`).addEventListener('click', () => { state.muted[kind] = !state.muted[kind]; $(`${kind}-mute`).textContent = state.muted[kind] ? `Unmute ${kind}` : `Mute ${kind}`; syncGains(); }));
+['vocal', 'music', 'all'].forEach((kind) => $(`extract-${kind}`).addEventListener('click', (event) => { if (!state.session) return; status('extract-status', `Preparing ${kind === 'all' ? 'both tracks' : `${kind} track`} download…`); window.setTimeout(() => status('extract-status', 'Download started.'), 250); }));
+document.querySelectorAll('form button[type="submit"]').forEach((button) => { button.dataset.label = button.textContent; });

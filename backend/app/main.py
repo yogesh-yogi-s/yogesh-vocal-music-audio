@@ -13,10 +13,12 @@ from pathlib import Path
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.background import BackgroundTask
 
 from backend.vma import create_vma, extract_all, extract_music, extract_vocal, read_vma
 from backend.vma.audio import parse_pcm_wav
 from backend.vma.models import StreamType, VMAError
+from backend.app import vma_service
 
 logger = logging.getLogger(__name__)
 MAX_UPLOAD_BYTES = 500 * 1024 * 1024
@@ -47,6 +49,120 @@ def health():
     return {"status": "ok"}
 
 
+@app.post("/api/vma/create", tags=["VMA"])
+async def api_create_vma(
+    vocal: UploadFile = File(..., description="Uncompressed PCM Vocal WAV"),
+    music: UploadFile = File(..., description="Uncompressed PCM Music WAV"),
+    title: str = Form(""),
+    artist: str = Form(""),
+):
+    directory = Path(tempfile.mkdtemp(prefix="vma-create-"))
+    try:
+        vocal_path = await vma_service.store_upload(vocal, directory / "vocal-input.wav")
+        music_path = await vma_service.store_upload(music, directory / "music-input.wav")
+        output = directory / "song.vma"
+        container = vma_service.create_container(vocal_path, music_path, output, title=title, artist=artist)
+        return FileResponse(
+            output,
+            media_type="application/vnd.vma",
+            filename="song.vma",
+            headers={
+                "X-VMA-Version": str(container.version),
+                "X-VMA-Stream-Count": str(len(container.streams)),
+                "X-VMA-Duration-Seconds": f"{container.duration_seconds:.6f}",
+            },
+            background=BackgroundTask(vma_service.cleanup_directory, directory),
+        )
+    except VMAError as exc:
+        vma_service.cleanup_directory(directory)
+        raise HTTPException(422, str(exc)) from exc
+    except HTTPException:
+        vma_service.cleanup_directory(directory)
+        raise
+    except Exception as exc:
+        vma_service.cleanup_directory(directory)
+        logger.exception("VMA API creation failed")
+        raise HTTPException(500, "VMA creation failed") from exc
+
+
+@app.post("/api/vma/validate", tags=["VMA"])
+async def api_validate_vma(file: UploadFile = File(..., description="VMA container")):
+    with tempfile.TemporaryDirectory(prefix="vma-validate-") as directory:
+        try:
+            path = await vma_service.store_upload(file, Path(directory) / "input.vma")
+            return vma_service.validation_payload(vma_service.validate_vma(path))
+        except VMAError as exc:
+            raise HTTPException(422, str(exc)) from exc
+
+
+@app.post("/api/vma/info", tags=["VMA"])
+async def api_vma_info(file: UploadFile = File(..., description="VMA container")):
+    with tempfile.TemporaryDirectory(prefix="vma-info-") as directory:
+        try:
+            path = await vma_service.store_upload(file, Path(directory) / "input.vma")
+            return vma_service.info_payload(read_vma(path))
+        except VMAError as exc:
+            raise HTTPException(422, str(exc)) from exc
+
+
+async def _api_extract(file: UploadFile, kind: str):
+    directory = Path(tempfile.mkdtemp(prefix=f"vma-extract-{kind}-"))
+    try:
+        source = await vma_service.store_upload(file, directory / "input.vma")
+        output = vma_service.extract_track(source, kind, directory / f"{kind}.wav")
+        return FileResponse(
+            output, media_type="audio/wav", filename=f"{kind}.wav",
+            background=BackgroundTask(vma_service.cleanup_directory, directory),
+        )
+    except VMAError as exc:
+        vma_service.cleanup_directory(directory)
+        raise HTTPException(422, str(exc)) from exc
+    except HTTPException:
+        vma_service.cleanup_directory(directory)
+        raise
+    except Exception as exc:
+        vma_service.cleanup_directory(directory)
+        logger.exception("VMA API extraction failed")
+        raise HTTPException(500, "VMA extraction failed") from exc
+
+
+@app.post("/api/vma/extract/vocal", tags=["VMA"])
+async def api_extract_vocal(file: UploadFile = File(..., description="VMA container")):
+    return await _api_extract(file, "vocal")
+
+
+@app.post("/api/vma/extract/music", tags=["VMA"])
+async def api_extract_music(file: UploadFile = File(..., description="VMA container")):
+    return await _api_extract(file, "music")
+
+
+@app.post("/api/vma/extract/all", tags=["VMA"])
+async def api_extract_all(file: UploadFile = File(..., description="VMA container")):
+    directory = Path(tempfile.mkdtemp(prefix="vma-extract-all-"))
+    try:
+        source = await vma_service.store_upload(file, directory / "input.vma")
+        output_directory = directory / "tracks"
+        vocal, music = extract_all(source, output_directory)
+        archive = directory / "vma-tracks.zip"
+        with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as bundle:
+            bundle.write(vocal, "vocal.wav")
+            bundle.write(music, "music.wav")
+        return FileResponse(
+            archive, media_type="application/zip", filename="vma-tracks.zip",
+            background=BackgroundTask(vma_service.cleanup_directory, directory),
+        )
+    except VMAError as exc:
+        vma_service.cleanup_directory(directory)
+        raise HTTPException(422, str(exc)) from exc
+    except HTTPException:
+        vma_service.cleanup_directory(directory)
+        raise
+    except Exception as exc:
+        vma_service.cleanup_directory(directory)
+        logger.exception("VMA API extract-all failed")
+        raise HTTPException(500, "VMA extraction failed") from exc
+
+
 @app.post("/api/create")
 async def create_container(
     request: Request,
@@ -63,7 +179,12 @@ async def create_container(
         parse_pcm_wav(vocal_path)
         parse_pcm_wav(music_path)
         output = create_vma(vocal_path, music_path, job / "song.vma", {"title": title, "artist": artist})
-        return FileResponse(output, media_type="application/vnd.vma", filename="song.vma")
+        return FileResponse(
+            output,
+            media_type="application/vnd.vma",
+            filename="song.vma",
+            headers={"X-VMA-Session": job.name},
+        )
     except VMAError as exc:
         shutil.rmtree(job, ignore_errors=True)
         raise HTTPException(400, str(exc)) from exc

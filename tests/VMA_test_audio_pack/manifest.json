@@ -1,0 +1,130 @@
+[
+  {
+    "case": "01_equal_10s",
+    "vocal": {
+      "file": "01_equal_10s/synthetic_vocal.wav",
+      "duration_seconds": 10,
+      "sample_rate": 44100,
+      "channels": 1
+    },
+    "music": {
+      "file": "01_equal_10s/synthetic_music.wav",
+      "duration_seconds": 10,
+      "sample_rate": 44100,
+      "channels": 1
+    },
+    "note": ""
+  },
+  {
+    "case": "02_music_longer",
+    "vocal": {
+      "file": "02_music_longer/synthetic_vocal.wav",
+      "duration_seconds": 10,
+      "sample_rate": 44100,
+      "channels": 1
+    },
+    "music": {
+      "file": "02_music_longer/synthetic_music.wav",
+      "duration_seconds": 15,
+      "sample_rate": 44100,
+      "channels": 1
+    },
+    "note": ""
+  },
+  {
+    "case": "03_vocal_longer",
+    "vocal": {
+      "file": "03_vocal_longer/synthetic_vocal.wav",
+      "duration_seconds": 15,
+      "sample_rate": 44100,
+      "channels": 1
+    },
+    "music": {
+      "file": "03_vocal_longer/synthetic_music.wav",
+      "duration_seconds": 10,
+      "sample_rate": 44100,
+      "channels": 1
+    },
+    "note": ""
+  },
+  {
+    "case": "04_large_difference",
+    "vocal": {
+      "file": "04_large_difference/synthetic_vocal.wav",
+      "duration_seconds": 5,
+      "sample_rate": 44100,
+      "channels": 1
+    },
+    "music": {
+      "file": "04_large_difference/synthetic_music.wav",
+      "duration_seconds": 20,
+      "sample_rate": 44100,
+      "channels": 1
+    },
+    "note": ""
+  },
+  {
+    "case": "05_short",
+    "vocal": {
+      "file": "05_short/synthetic_vocal.wav",
+      "duration_seconds": 2,
+      "sample_rate": 44100,
+      "channels": 1
+    },
+    "music": {
+      "file": "05_short/synthetic_music.wav",
+      "duration_seconds": 5,
+      "sample_rate": 44100,
+      "channels": 1
+    },
+    "note": ""
+  },
+  {
+    "case": "06_sample_rate_mismatch",
+    "vocal": {
+      "file": "06_sample_rate_mismatch/synthetic_vocal.wav",
+      "duration_seconds": 10,
+      "sample_rate": 44100,
+      "channels": 1
+    },
+    "music": {
+      "file": "06_sample_rate_mismatch/synthetic_music.wav",
+      "duration_seconds": 10,
+      "sample_rate": 48000,
+      "channels": 1
+    },
+    "note": ""
+  },
+  {
+    "case": "07_channel_mismatch",
+    "vocal": {
+      "file": "07_channel_mismatch/synthetic_vocal.wav",
+      "duration_seconds": 10,
+      "sample_rate": 44100,
+      "channels": 1
+    },
+    "music": {
+      "file": "07_channel_mismatch/synthetic_music.wav",
+      "duration_seconds": 10,
+      "sample_rate": 44100,
+      "channels": 2
+    },
+    "note": ""
+  },
+  {
+    "case": "08_offset_example",
+    "vocal": {
+      "file": "08_offset_example/synthetic_vocal.wav",
+      "duration_seconds": 10,
+      "sample_rate": 44100,
+      "channels": 1
+    },
+    "music": {
+      "file": "08_offset_example/synthetic_music.wav",
+      "duration_seconds": 10,
+      "sample_rate": 44100,
+      "channels": 1
+    },
+    "note": "Vocal has 2s leading silence."
+  }
+]

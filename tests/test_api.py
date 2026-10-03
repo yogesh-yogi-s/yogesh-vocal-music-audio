@@ -19,6 +19,7 @@ def test_api_create_open_and_extract(tmp_path):
             files={"vocal": ("vocal.wav", vocal.read_bytes(), "audio/wav"), "music": ("music.wav", music.read_bytes(), "audio/wav")},
         )
         assert created.status_code == 200
+        assert created.headers["x-vma-session"]
         opened = client.post("/api/open", files={"file": ("song.vma", created.content, "application/vnd.vma")})
         assert opened.status_code == 200
         payload = opened.json()

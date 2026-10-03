@@ -18,6 +18,29 @@ python -m uvicorn backend.app.main:app --reload
 
 Open [http://127.0.0.1:8000](http://127.0.0.1:8000). Uploads are limited to 500 MB per file and exist only for the lifetime of the local server.
 
+## HTTP API
+
+Interactive OpenAPI documentation is available at [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs); the machine-readable schema is at `/openapi.json`.
+
+| Method | Endpoint | Result |
+|---|---|---|
+| POST | `/api/vma/create` | Packages multipart `vocal` and `music` PCM WAV uploads into `song.vma` |
+| POST | `/api/vma/validate` | Returns JSON validation status and stream metadata for multipart `file` |
+| POST | `/api/vma/info` | Returns JSON container metadata and stream properties for multipart `file` |
+| POST | `/api/vma/extract/vocal` | Returns the stored vocal as WAV |
+| POST | `/api/vma/extract/music` | Returns the stored music as WAV |
+| POST | `/api/vma/extract/all` | Returns a ZIP containing `vocal.wav` and `music.wav` |
+
+Example workflow:
+
+```powershell
+curl.exe -X POST http://127.0.0.1:8000/api/vma/create -F "vocal=@vocal.wav" -F "music=@music.wav" -o song.vma
+curl.exe -X POST http://127.0.0.1:8000/api/vma/info -F "file=@song.vma"
+curl.exe -X POST http://127.0.0.1:8000/api/vma/extract/all -F "file=@song.vma" -o vma-tracks.zip
+```
+
+The API stores uploads under application-generated temporary filenames, returns JSON errors for invalid input, and cleans request files after processing.
+
 ## Test
 
 ```powershell
