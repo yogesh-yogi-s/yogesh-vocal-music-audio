@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from .format import CHUNK_HEADER, RIFF_HEADER, SUPPORTED_BIT_DEPTHS, WAV_FMT
+from .format import CHUNK_HEADER, MAX_SAMPLE_RATE, RIFF_HEADER, SUPPORTED_BIT_DEPTHS, WAV_FMT
 from .models import AudioFormat, VMAError
 
 WAVE_FORMAT_EXTENSIBLE = 0xFFFE
@@ -17,6 +17,17 @@ class ParsedWav:
     audio: AudioFormat
     data_offset: int
     data_size: int
+
+
+def _validate_pcm_descriptor(*, sample_rate: int, channels: int, bit_depth: int, sample_count: int, data_size: int) -> AudioFormat:
+    if not (1 <= sample_rate <= MAX_SAMPLE_RATE) or channels not in {1, 2} or bit_depth not in SUPPORTED_BIT_DEPTHS:
+        raise VMAError("VMA stream audio format is unsupported")
+    if sample_count == 0:
+        raise VMAError("VMA stream synchronization fields are invalid")
+    bytes_per_frame = channels * (bit_depth // 8)
+    if data_size != sample_count * bytes_per_frame:
+        raise VMAError("VMA stream data size does not match frame count")
+    return AudioFormat(sample_rate, channels, bit_depth, sample_count)
 
 
 def parse_pcm_wav(path: str | Path) -> ParsedWav:

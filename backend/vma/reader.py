@@ -3,11 +3,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from .format import (
-    HEADER_SIZE, HEADER_STRUCT, MAGIC, MAX_FILE_SIZE, MAX_METADATA_SIZE, MAX_SAMPLE_RATE,
-    MAX_STREAMS, STREAM_ENTRY_SIZE, STREAM_STRUCT, SUPPORTED_BIT_DEPTHS, VERSION,
-)
-from .models import AudioFormat, Codec, PayloadRange, StreamInfo, StreamType, VMAError, VMAFile
+from .audio import _validate_pcm_descriptor
+from .format import HEADER_SIZE, HEADER_STRUCT, MAGIC, MAX_FILE_SIZE, MAX_METADATA_SIZE, MAX_STREAMS, STREAM_ENTRY_SIZE, STREAM_STRUCT, VERSION
+from .models import Codec, PayloadRange, StreamInfo, StreamType, VMAError, VMAFile
 
 
 def read_vma(vma_path: str | Path) -> VMAFile:
@@ -62,17 +60,16 @@ def _parse_stream(raw: bytes, header_size: int, file_size: int) -> StreamInfo:
         raise VMAError("VMA contains an unsupported stream type or codec") from exc
     if codec is not Codec.PCM_WAV_LE:
         raise VMAError("unsupported VMA codec")
-    if not (1 <= sample_rate <= MAX_SAMPLE_RATE) or channels not in {1, 2} or bit_depth not in SUPPORTED_BIT_DEPTHS:
-        raise VMAError("VMA stream audio format is unsupported")
-    if start_sample < 0 or sample_count == 0:
+    audio = _validate_pcm_descriptor(
+        sample_rate=sample_rate, channels=channels, bit_depth=bit_depth,
+        sample_count=sample_count, data_size=data_size,
+    )
+    if start_sample < 0:
         raise VMAError("VMA stream synchronization fields are invalid")
-    bytes_per_frame = channels * (bit_depth // 8)
     payload = PayloadRange(data_offset, data_size)
-    if payload.size != sample_count * bytes_per_frame:
-        raise VMAError("VMA stream data size does not match frame count")
     if payload.offset < header_size or payload.end > file_size:
         raise VMAError("VMA stream data range is outside the file")
-    return StreamInfo(stream_id, stream_type, codec, AudioFormat(sample_rate, channels, bit_depth, sample_count), start_sample, payload.offset, payload.size)
+    return StreamInfo(stream_id, stream_type, codec, audio, start_sample, payload.offset, payload.size)
 
 
 def _validate_stream_set(streams: tuple[StreamInfo, ...]) -> None:

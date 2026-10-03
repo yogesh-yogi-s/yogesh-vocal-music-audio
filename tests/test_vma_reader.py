@@ -47,6 +47,47 @@ def test_vma_level_start_sample_metadata_is_distinct_from_leading_silence(tmp_pa
     assert stream.start_seconds == pytest.approx(2.0)
 
 
+@pytest.mark.parametrize(
+    ("field", "value", "expected_message"),
+    [
+        (3, 0, "audio format"),
+        (4, 3, "audio format"),
+        (5, 20, "audio format"),
+        (7, 0, "synchronization"),
+        (9, 1, "data size"),
+    ],
+)
+def test_reader_delegates_pcm_descriptor_validation(tmp_path, wav_pair, field, value, expected_message):
+    vocal, music, _, _ = wav_pair
+    path = create_vma(vocal, music, tmp_path / "invalid-pcm-descriptor.vma")
+    raw = bytearray(path.read_bytes())
+    metadata_size = HEADER_STRUCT.unpack_from(raw)[5]
+    entry_offset = HEADER_SIZE + metadata_size
+    entry = list(STREAM_STRUCT.unpack_from(raw, entry_offset))
+    entry[field] = value
+    STREAM_STRUCT.pack_into(raw, entry_offset, *entry)
+    path.write_bytes(raw)
+
+    with pytest.raises(VMAError, match=expected_message):
+        read_vma(path)
+
+
+def test_reader_preserves_pcm_format_error_precedence_over_negative_start_sample(tmp_path, wav_pair):
+    vocal, music, _, _ = wav_pair
+    path = create_vma(vocal, music, tmp_path / "invalid-format-and-start.vma")
+    raw = bytearray(path.read_bytes())
+    metadata_size = HEADER_STRUCT.unpack_from(raw)[5]
+    entry_offset = HEADER_SIZE + metadata_size
+    entry = list(STREAM_STRUCT.unpack_from(raw, entry_offset))
+    entry[3] = 0
+    entry[6] = -1
+    STREAM_STRUCT.pack_into(raw, entry_offset, *entry)
+    path.write_bytes(raw)
+
+    with pytest.raises(VMAError, match="audio format"):
+        read_vma(path)
+
+
 def _valid_vma(tmp_path):
     case = CASES[0]
     path = create_vma(case.vocal_path, case.music_path, tmp_path / "valid.vma")
