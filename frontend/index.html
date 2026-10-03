@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VMA — Vocal Music Audio</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <main class="shell">
+    <header><p class="eyebrow">VMA v0.1</p><h1>Vocal Music Audio</h1><p class="lede">A lossless container for synchronized vocal and instrumental streams.</p></header>
+    <section class="card">
+      <h2>Create VMA</h2>
+      <form id="create-form">
+        <div class="files"><label>Vocal WAV<input id="vocal-input" name="vocal" type="file" accept="audio/wav,.wav" required></label><label>Music / Instrumental WAV<input id="music-input" name="music" type="file" accept="audio/wav,.wav" required></label></div>
+        <div class="fields"><label>Song title<input name="title" maxlength="200" placeholder="Optional"></label><label>Artist<input name="artist" maxlength="200" placeholder="Optional"></label></div>
+        <div id="source-info" class="details muted">Choose two PCM WAV files (mono or stereo; 8/16/24/32-bit).</div>
+        <button type="submit">Create VMA</button>
+      </form>
+      <p id="create-status" class="status" aria-live="polite"></p>
+      <a id="download-vma" class="download hidden" download="song.vma">Download song.vma</a>
+    </section>
+    <section class="card">
+      <h2>Open VMA</h2>
+      <form id="open-form" class="inline-form"><input name="file" type="file" accept=".vma,application/vnd.vma" required><button type="submit">Open VMA</button></form>
+      <p id="open-status" class="status" aria-live="polite"></p>
+      <div id="vma-details" class="hidden">
+        <dl id="metadata-list" class="details"></dl>
+        <div id="stream-list" class="streams"></div>
+        <div class="player">
+          <div class="transport"><button id="play" type="button">Play</button><button id="pause" type="button">Pause</button><button id="stop" type="button">Stop</button><label>Seek <input id="seek" type="range" min="0" max="0" value="0" step="0.01"></label><output id="time">0:00 / 0:00</output></div>
+          <label>Master volume <input id="master-volume" type="range" min="0" max="1" value="1" step="0.01"></label>
+          <label>Vocal volume <input id="vocal-volume" type="range" min="0" max="1" value="1" step="0.01"><button id="vocal-mute" type="button">Mute vocal</button></label>
+          <label>Music volume <input id="music-volume" type="range" min="0" max="1" value="1" step="0.01"><button id="music-mute" type="button">Mute music</button></label>
+        </div>
+        <div class="actions"><a id="extract-vocal" class="download">Extract Vocal</a><a id="extract-music" class="download">Extract Music</a><a id="extract-all" class="download">Extract Both</a></div>
+      </div>
+    </section>
+  </main>
+  <script src="/js/app.js?v=0.1.1"></script>
+</body>
+</html>
