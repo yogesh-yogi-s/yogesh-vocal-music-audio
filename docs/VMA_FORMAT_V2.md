@@ -172,6 +172,12 @@ Readers must enforce documented local resource limits before allocating memory, 
 
 The reference implementation enforces `MAX_STREAMS_V2 = 64`. A V2 reader must reject a file whose `stream_count` header field exceeds this limit before allocating descriptor-table memory or reading any descriptor. This is a resource-safety guard, not a binary-format semantic maximum. The V2 format itself imposes no upper bound on stream count beyond the constraints of a valid `stream_count` u32 field and file-size limits. Future implementations may choose a different documented resource limit; they must document it clearly and must not reinterpret stored bytes as invalid solely because of a limit difference.
 
+### 12.2 Reference byte-allocation limits
+
+The reference implementation also enforces `MAX_METADATA_BYTES_V2 = 1,048,576` and `MAX_FORMAT_INFO_BYTES_V2 = 1,048,576`. The metadata limit applies to the complete metadata region; the FORMAT_INFO limit applies independently to each stream's FORMAT_INFO block. A reader rejects an oversized declared region before reading that region into memory.
+
+These are local implementation/resource-safety limits, not V2 binary-format semantic limits. A V2 file exceeding one implementation's documented limit may remain valid for an implementation with a larger documented limit.
+
 ## 13. Reader and writer conformance
 
 A conforming V2 writer must:
