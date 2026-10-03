@@ -2,7 +2,7 @@ const state = { session: null, meta: null, context: null, master: null, gains: {
 const $ = (id) => document.getElementById(id);
 const fmtTime = (seconds) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
 
-function status(id, message, error = false) { const node = $(id); node.textContent = message; node.classList.toggle('error', error); }
+function status(id, message, error = false) { const node = $(id); node.textContent = message; node.classList.toggle('error', error); node.dataset.state = error ? 'error' : message ? 'success' : ''; }
 function setWorking(form, working, label) { const button = form.querySelector('button[type="submit"]'); button.disabled = working; button.textContent = working ? label : button.dataset.label; form.setAttribute('aria-busy', String(working)); }
 async function responseError(response) { const text = await response.text(); try { const payload = JSON.parse(text); return payload.detail || `Request failed (${response.status})`; } catch { return text.trim() || `Request failed (${response.status})`; } }
 async function describeWav(file) {

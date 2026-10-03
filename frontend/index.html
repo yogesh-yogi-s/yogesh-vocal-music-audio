@@ -8,35 +8,63 @@
 </head>
 <body>
   <main class="shell">
-    <header><p class="eyebrow">VMA v0.1</p><h1>Vocal Music Audio</h1><p class="lede">A lossless container for synchronized vocal and instrumental streams.</p></header>
-    <section class="card">
-      <h2>Create VMA</h2>
-      <form id="create-form" novalidate>
-        <div class="files"><label>Vocal WAV<input id="vocal-input" name="vocal" type="file" accept="audio/wav,.wav" required></label><label>Music / Instrumental WAV<input id="music-input" name="music" type="file" accept="audio/wav,.wav" required></label></div>
-        <div class="fields"><label>Song title<input name="title" maxlength="200" placeholder="Optional"></label><label>Artist<input name="artist" maxlength="200" placeholder="Optional"></label></div>
-        <div id="source-info" class="details muted">Choose two PCM WAV files (mono or stereo; 8/16/24/32-bit).</div>
-        <button type="submit">Create VMA</button>
-      </form>
-      <p id="create-status" class="status" aria-live="polite"></p>
-      <a id="download-vma" class="download hidden" download="song.vma">Download song.vma</a>
+    <header class="app-header">
+      <div class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></div>
+      <div><p class="eyebrow">VMA v0.1</p><h1>Vocal Music Audio</h1><p class="lede">A lossless container for synchronized vocal and instrumental streams.</p></div>
+    </header>
+
+    <section class="workspace-grid" aria-label="VMA workspace">
+      <section class="card create-card" aria-labelledby="create-heading">
+        <div class="section-heading"><div><p class="section-kicker">New container</p><h2 id="create-heading">Create VMA</h2></div><p>Package two original PCM WAV streams into one synchronized VMA file.</p></div>
+        <form id="create-form" novalidate>
+          <div class="files">
+            <label class="file-field">Vocal WAV<input id="vocal-input" name="vocal" type="file" accept="audio/wav,.wav" required aria-describedby="source-info"><span>Choose a vocal WAV file</span></label>
+            <label class="file-field">Music / Instrumental WAV<input id="music-input" name="music" type="file" accept="audio/wav,.wav" required aria-describedby="source-info"><span>Choose a music WAV file</span></label>
+          </div>
+          <div class="fields">
+            <label>Song title <span class="optional">Optional</span><input name="title" maxlength="200" placeholder="e.g. Session mix"></label>
+            <label>Artist <span class="optional">Optional</span><input name="artist" maxlength="200" placeholder="e.g. Artist name"></label>
+          </div>
+          <div id="source-info" class="source-info">Choose two PCM WAV files: mono or stereo, 8/16/24/32-bit.</div>
+          <div class="form-footer"><button class="button button-primary" type="submit">Create VMA</button><p class="form-note">Streams are stored separately and losslessly.</p></div>
+        </form>
+        <p id="create-status" class="status" aria-live="polite"></p>
+        <a id="download-vma" class="download button button-secondary hidden" download="song.vma">Download song.vma</a>
+      </section>
+
+      <section class="card open-card" aria-labelledby="open-heading">
+        <div class="section-heading"><div><p class="section-kicker">Existing container</p><h2 id="open-heading">Open VMA</h2></div><p>Inspect, play, and recover the streams stored in an existing VMA file.</p></div>
+        <form id="open-form" class="open-form" novalidate>
+          <label class="file-field">VMA file<input id="vma-input" name="file" type="file" accept=".vma,application/vnd.vma" required><span>Choose a .vma file</span></label>
+          <button class="button button-secondary" type="submit">Open VMA</button>
+        </form>
+        <p id="open-status" class="status" aria-live="polite"></p>
+      </section>
     </section>
-    <section class="card">
-      <h2>Open VMA</h2>
-      <form id="open-form" class="inline-form" novalidate><input id="vma-input" name="file" type="file" accept=".vma,application/vnd.vma" required><button type="submit">Open VMA</button></form>
-      <p id="open-status" class="status" aria-live="polite"></p>
-      <div id="vma-details" class="hidden">
-        <dl id="metadata-list" class="details"></dl>
-        <div id="stream-list" class="streams"></div>
-        <div class="player">
-          <div class="transport"><button id="play" type="button">Play</button><button id="pause" type="button">Pause</button><button id="stop" type="button">Stop</button><label>Seek <input id="seek" type="range" min="0" max="0" value="0" step="0.01"></label><output id="time">0:00 / 0:00</output></div>
-          <label>Master volume <input id="master-volume" type="range" min="0" max="1" value="1" step="0.01"></label>
-          <label>Vocal volume <input id="vocal-volume" type="range" min="0" max="1" value="1" step="0.01"><button id="vocal-mute" type="button">Mute vocal</button></label>
-          <label>Music volume <input id="music-volume" type="range" min="0" max="1" value="1" step="0.01"><button id="music-mute" type="button">Mute music</button></label>
+
+    <section id="vma-details" class="current-vma hidden" aria-live="polite">
+      <div class="section-intro"><div><p class="section-kicker">Current container</p><h2>VMA information</h2></div><p>Metadata and stream properties are read directly from the opened container.</p></div>
+      <div class="metadata-panel"><dl id="metadata-list" class="details"></dl></div>
+      <div id="stream-list" class="streams" aria-label="VMA stream metadata"></div>
+
+      <section class="player card" aria-labelledby="player-heading">
+        <div class="player-heading"><div><p class="section-kicker">Synchronized playback</p><h2 id="player-heading">Player</h2></div><output id="time" class="time-readout">0:00 / 0:00</output></div>
+        <div class="transport"><div class="transport-buttons"><button id="play" class="button button-primary" type="button">Play</button><button id="pause" class="button button-secondary" type="button">Pause</button><button id="stop" class="button button-quiet" type="button">Stop</button></div><label class="timeline-label">Playback position<input id="seek" type="range" min="0" max="0" value="0" step="0.01" aria-label="Seek playback position"></label></div>
+        <div class="master-control"><label>Master volume<input id="master-volume" type="range" min="0" max="1" value="1" step="0.01" aria-label="Master volume"></label></div>
+        <div class="stream-controls" aria-label="Individual stream controls">
+          <section class="stream-control vocal-control" aria-labelledby="vocal-control-heading"><div class="stream-control-heading"><div><p class="control-label">Independent stream</p><h3 id="vocal-control-heading">Vocal</h3></div><button id="vocal-mute" class="button button-quiet" type="button">Mute vocal</button></div><label>Vocal volume<input id="vocal-volume" type="range" min="0" max="1" value="1" step="0.01" aria-label="Vocal volume"></label></section>
+          <section class="stream-control music-control" aria-labelledby="music-control-heading"><div class="stream-control-heading"><div><p class="control-label">Independent stream</p><h3 id="music-control-heading">Music / Instrumental</h3></div><button id="music-mute" class="button button-quiet" type="button">Mute music</button></div><label>Music volume<input id="music-volume" type="range" min="0" max="1" value="1" step="0.01" aria-label="Music volume"></label></section>
         </div>
-        <div class="actions"><a id="extract-vocal" class="download">Extract Vocal</a><a id="extract-music" class="download">Extract Music</a><a id="extract-all" class="download">Extract Both</a></div>
+      </section>
+
+      <section class="extraction card" aria-labelledby="extract-heading">
+        <div class="section-heading"><div><p class="section-kicker">Original streams</p><h2 id="extract-heading">Extract tracks</h2></div><p>Recover the original stored streams without AI vocal separation.</p></div>
+        <div class="actions"><a id="extract-vocal" class="download button button-secondary">Extract Vocal</a><a id="extract-music" class="download button button-secondary">Extract Music</a><a id="extract-all" class="download button button-primary">Extract Both</a></div>
         <p id="extract-status" class="status" aria-live="polite"></p>
-      </div>
+      </section>
     </section>
+
+    <aside class="how-it-works" aria-labelledby="how-heading"><div class="how-number" aria-hidden="true">01</div><div><p class="section-kicker">Container concept</p><h2 id="how-heading">How VMA works</h2><p>Separate original Vocal and Music / Instrumental audio streams are stored inside one VMA container. During playback, the streams are synchronized and can be controlled independently. The original streams can later be extracted without AI vocal separation.</p></div></aside>
   </main>
   <script src="/js/app.js?v=0.1.1"></script>
 </body>

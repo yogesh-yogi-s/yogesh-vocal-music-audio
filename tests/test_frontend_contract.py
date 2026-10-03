@@ -9,7 +9,7 @@ def test_homepage_exposes_complete_vma_user_journey():
     for identifier in (
         "create-form", "vocal-input", "music-input", "open-form", "vma-input", "vma-details",
         "play", "pause", "stop", "seek", "master-volume", "vocal-volume", "music-volume",
-        "vocal-mute", "music-mute", "extract-vocal", "extract-music", "extract-all",
+        "vocal-mute", "music-mute", "extract-vocal", "extract-music", "extract-all", "how-heading",
     ):
         assert f'id="{identifier}"' in html
 
