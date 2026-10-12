@@ -3,3 +3,7 @@ __pycache__/
 .pytest_cache/
 .pytest_tmp/
 .venv/
+# Packaging build artifacts
+build/
+dist/
+*.egg-info/

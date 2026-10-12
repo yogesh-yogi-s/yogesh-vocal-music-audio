@@ -40,7 +40,9 @@ async def lifespan(app: FastAPI):
         shutil.rmtree(storage, ignore_errors=True)
 
 
-app = FastAPI(title="VMA v0.1", lifespan=lifespan)
+APP_VERSION = "0.3"
+
+app = FastAPI(title=f"VMA v{APP_VERSION}", version=APP_VERSION, lifespan=lifespan)
 
 
 @app.get("/api/health")

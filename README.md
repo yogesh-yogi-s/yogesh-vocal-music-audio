@@ -48,7 +48,16 @@ python -m pip install -r requirements.txt
 python -m uvicorn backend.app.main:app --reload
 ```
 
+On Linux or macOS, use `python -m venv .venv && . .venv/bin/activate` in place of the PowerShell activation step.
+
 Open [http://127.0.0.1:8000](http://127.0.0.1:8000) in a browser. Uploads are limited to 500 MB per file and are held in temporary application storage.
+
+To run the same application in a container:
+
+```powershell
+docker build -t vma .
+docker run --rm -p 8000:8000 vma
+```
 
 ## Browser Workflow
 
@@ -118,13 +127,14 @@ curl.exe -X POST http://127.0.0.1:8000/api/vma/create -F "vocal=@vocal.wav" -F "
 
 ## Testing
 
-Run the complete automated suite:
+Install the development dependencies, then run the complete automated suite:
 
 ```powershell
+python -m pip install -r requirements-dev.txt
 python -m pytest -q
 ```
 
-Current verified state: **265 tests passing, 0 failed, 0 skipped, 0 errors**.
+Current verified state: **281 tests passing, 0 failed, 0 skipped, 0 errors**.
 
 The suite covers:
 
@@ -149,7 +159,13 @@ node --check frontend/js/app.js
 
 ## Library API
 
-When importing from the repository root, add `backend` to `PYTHONPATH` or install the package in your application environment.
+Install the `vma` library from the repository root, or add `backend` to `PYTHONPATH`:
+
+```powershell
+python -m pip install .
+```
+
+The library has no third-party runtime dependencies. Use `python -m pip install ".[app]"` to add the web application dependencies.
 
 ```python
 from vma import create_vma, read_vma, extract_vocal, extract_music, extract_all, validate_vma
@@ -183,3 +199,8 @@ V1 and V2 are entirely separate parsing stacks. V2 does not depend on V1 models.
 - [VMA v2 format specification](docs/VMA_FORMAT_V2.md) — V2 binary layout, opaque byte-store contract, FORMAT_ID namespace, TLV FORMAT_INFO, version dispatch, and validation rules.
 - [FORMAT_ID registry](docs/VMA_FORMAT_ID_REGISTRY.md) — Approved FORMAT_ID allocations, range policy, status lifecycle, and governance rules.
 - [Architecture overview](docs/ARCHITECTURE.md) — Frontend, FastAPI, VMA library, temporary storage, extraction, and synchronized Web Audio playback flow.
+- [Roadmap](docs/ROADMAP.md) — current-flow analysis, performance findings, and the phased public-reach plan.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
