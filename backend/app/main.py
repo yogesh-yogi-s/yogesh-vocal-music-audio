@@ -51,34 +51,59 @@ def health():
     return {"status": "ok"}
 
 
+def _safe_upload_suffix(filename: str | None, default: str = ".bin") -> str:
+    if not filename:
+        return default
+    suffix = Path(filename).suffix.lower()
+    if suffix and all(c.isalnum() for c in suffix.lstrip(".")) and len(suffix) <= 10:
+        return suffix
+    return default
+
+
 @app.post("/api/vma/create", tags=["VMA"])
 async def api_create_vma(
-    vocal: UploadFile = File(..., description="Uncompressed PCM Vocal WAV"),
-    music: UploadFile = File(..., description="Uncompressed PCM Music WAV"),
+    vocal: UploadFile = File(..., description="Vocal audio stream"),
+    music: UploadFile = File(..., description="Music / Instrumental audio stream"),
     title: str = Form(""),
     artist: str = Form(""),
     vocal_start_sample: int = Form(0),
     music_start_sample: int = Form(0),
+    version: int | None = Form(None),
 ):
     directory = Path(tempfile.mkdtemp(prefix="vma-create-"))
     try:
-        vocal_path = await vma_service.store_upload(vocal, directory / "vocal-input.wav")
-        music_path = await vma_service.store_upload(music, directory / "music-input.wav")
+        vocal_ext = _safe_upload_suffix(vocal.filename, default=".bin")
+        music_ext = _safe_upload_suffix(music.filename, default=".bin")
+        vocal_path = await vma_service.store_upload(vocal, directory / f"vocal-input{vocal_ext}")
+        music_path = await vma_service.store_upload(music, directory / f"music-input{music_ext}")
         output = directory / "song.vma"
         container = vma_service.create_container(
             vocal_path, music_path, output,
             title=title, artist=artist,
             vocal_start_sample=vocal_start_sample,
             music_start_sample=music_start_sample,
+            version=version,
+            vocal_filename=vocal.filename,
+            music_filename=music.filename,
+            vocal_content_type=vocal.content_type,
+            music_content_type=music.content_type,
         )
+        is_v2 = isinstance(container, V2File)
+        version_num = container.header.version if is_v2 else container.version
+        stream_count = len(container.streams)
+        if is_v2:
+            durations = [s.descriptor.duration for s in container.streams if s.descriptor.duration]
+            duration = (max(durations) / vma_service.NANOSECONDS_PER_SECOND) if durations else 0.0
+        else:
+            duration = container.duration_seconds
         return FileResponse(
             output,
             media_type="application/vnd.vma",
             filename="song.vma",
             headers={
-                "X-VMA-Version": str(container.version),
-                "X-VMA-Stream-Count": str(len(container.streams)),
-                "X-VMA-Duration-Seconds": f"{container.duration_seconds:.6f}",
+                "X-VMA-Version": str(version_num),
+                "X-VMA-Stream-Count": str(stream_count),
+                "X-VMA-Duration-Seconds": f"{duration:.6f}",
             },
             background=BackgroundTask(vma_service.cleanup_directory, directory),
         )
@@ -181,25 +206,33 @@ async def create_container(
     artist: str = Form(""),
     vocal_start_sample: int = Form(0),
     music_start_sample: int = Form(0),
+    version: int | None = Form(None),
 ):
     job = _job_directory(request)
     try:
-        vocal_path = await vma_service.store_upload(vocal, job / "vocal-input.wav")
-        music_path = await vma_service.store_upload(music, job / "music-input.wav")
-        # Parse now so technical input errors reach the user before container writing.
-        parse_pcm_wav(vocal_path)
-        parse_pcm_wav(music_path)
-        output = create_vma(
-            vocal_path, music_path, job / "song.vma",
-            {"title": title, "artist": artist},
+        vocal_ext = _safe_upload_suffix(vocal.filename, default=".bin")
+        music_ext = _safe_upload_suffix(music.filename, default=".bin")
+        vocal_path = await vma_service.store_upload(vocal, job / f"vocal-input{vocal_ext}")
+        music_path = await vma_service.store_upload(music, job / f"music-input{music_ext}")
+        output = job / "song.vma"
+        container = vma_service.create_container(
+            vocal_path, music_path, output,
+            title=title, artist=artist,
             vocal_start_sample=vocal_start_sample,
             music_start_sample=music_start_sample,
+            version=version,
+            vocal_filename=vocal.filename,
+            music_filename=music.filename,
+            vocal_content_type=vocal.content_type,
+            music_content_type=music.content_type,
         )
+        is_v2 = isinstance(container, V2File)
+        version_num = container.header.version if is_v2 else container.version
         return FileResponse(
             output,
             media_type="application/vnd.vma",
             filename="song.vma",
-            headers={"X-VMA-Session": job.name},
+            headers={"X-VMA-Session": job.name, "X-VMA-Version": str(version_num)},
         )
     except VMAError as exc:
         shutil.rmtree(job, ignore_errors=True)

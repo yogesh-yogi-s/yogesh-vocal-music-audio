@@ -14,11 +14,11 @@ async function describeWav(file) {
   if (!fmt || !dataSize || !fmt.align) return `${file.name} · ${(file.size / 1024 / 1024).toFixed(2)} MB`;
   return `${file.name} · ${(dataSize / fmt.align / fmt.rate).toFixed(2)}s · ${fmt.rate} Hz · ${fmt.channels === 1 ? 'Mono' : `${fmt.channels} channels`} · ${fmt.bits}-bit`;
 }
-['vocal-input', 'music-input'].forEach((id) => $(id).addEventListener('change', async () => { const summaries = await Promise.all([$('vocal-input').files[0], $('music-input').files[0]].map(describeWav)); $('source-info').textContent = summaries.filter(Boolean).join('  |  ') || 'Choose two PCM WAV files.'; }));
+['vocal-input', 'music-input'].forEach((id) => $(id).addEventListener('change', async () => { const summaries = await Promise.all([$('vocal-input').files[0], $('music-input').files[0]].map(describeWav)); $('source-info').textContent = summaries.filter(Boolean).join('  |  ') || 'Choose two files (any audio format, unknown format, or binary payload).'; }));
 
 $('create-form').addEventListener('submit', async (event) => {
   event.preventDefault(); const form = event.currentTarget;
-  if (!$('vocal-input').files[0] || !$('music-input').files[0]) { status('create-status', 'Select both a Vocal WAV and a Music WAV before creating VMA.', true); return; }
+  if (!$('vocal-input').files[0] || !$('music-input').files[0]) { status('create-status', 'Select both a vocal and a music stream before creating VMA.', true); return; }
   setWorking(form, true, 'Creating VMA…'); status('create-status', 'Creating VMA…'); $('download-vma').classList.add('hidden');
   try {
     const response = await fetch('/api/create', { method: 'POST', body: new FormData(event.target) });

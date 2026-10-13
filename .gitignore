@@ -7,3 +7,5 @@ __pycache__/
 build/
 dist/
 *.egg-info/
+# Local temporary artifacts and generator fixtures
+tmp/

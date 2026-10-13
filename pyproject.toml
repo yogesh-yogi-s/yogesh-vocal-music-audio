@@ -42,3 +42,6 @@ Documentation = "https://github.com/yogesh-yogi-s/yogesh-vocal-music-audio/tree/
 [tool.setuptools.packages.find]
 where = ["backend"]
 include = ["vma*"]
+
+[tool.pyright]
+extraPaths = ["backend", "tests"]

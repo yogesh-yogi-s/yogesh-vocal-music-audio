@@ -32,7 +32,7 @@ def test_frontend_script_handles_api_errors_work_states_and_shared_playback_cloc
     script = (ROOT / "frontend" / "js" / "app.js").read_text("utf-8")
     for behavior in ("responseError", "setWorking", "openSession", "activateVma", "state.context.currentTime", "loadBuffers"):
         assert behavior in script
-    assert "Select both a Vocal WAV and a Music WAV" in script
+    assert "Select both a vocal and a music stream before creating VMA" in script
     assert "Select a VMA file before opening it" in script
     assert "X-VMA-Session" in script
     assert "source.start(when, offset)" in script

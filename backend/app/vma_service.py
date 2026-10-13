@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import shutil
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from fastapi import HTTPException, UploadFile
 
 from backend.vma import (
+    FormatInfoTLV,
+    V2StreamInput,
     create_vma,
+    create_vma_v2,
     extract_all,
     extract_music,
     extract_stream_v2,
@@ -17,8 +21,10 @@ from backend.vma import (
     read_vma_any,
     validate_vma,
 )
+from backend.vma.audio import parse_pcm_wav
 from backend.vma.formats.registry import FORMAT_REGISTRY
-from backend.vma.models import VMAFile
+from backend.vma.formats.riff_wave import is_riff_wave
+from backend.vma.models import VMAError, VMAFile
 from backend.vma.v2.constants import (
     ROLE_AUDIO_PRIMARY,
     ROLE_AUDIO_SUPPLEMENTAL,
@@ -58,6 +64,131 @@ async def store_upload(upload: UploadFile, destination: Path) -> Path:
     return destination
 
 
+def resolve_format_metadata(
+    path: Path,
+    source_filename: str | None = None,
+    content_type: str | None = None,
+) -> tuple[int, str, str, str]:
+    """Inspect file bytes and name to resolve (format_id, basename, media_type, file_extension)."""
+    raw_name = Path(source_filename or path.name).name.strip()
+    basename = raw_name if raw_name else path.name
+    # Ensure basename has no path separators, null bytes, and is valid UTF-8
+    basename = basename.replace("/", "_").replace("\\", "_").replace("\x00", "")
+    if not basename or basename in (".", ".."):
+        basename = path.name
+
+    suffix = Path(basename).suffix.lstrip(".").lower()
+
+    # Read leading bytes for signature checks
+    head = b""
+    try:
+        with path.open("rb") as f:
+            head = f.read(12)
+    except OSError:
+        pass
+
+    if is_riff_wave(head):
+        format_id = 0x1000  # RIFF_WAVE
+        ext = suffix if suffix else "wav"
+        media_type = "audio/wav"
+    elif suffix == "mp3" or (head.startswith(b"ID3") and suffix in ("", "mp3")):
+        format_id = 0x0000  # UNKNOWN range
+        ext = suffix if suffix else "mp3"
+        media_type = "audio/mpeg"
+    elif suffix == "flac" or head.startswith(b"fLaC"):
+        format_id = 0x0000
+        ext = suffix if suffix else "flac"
+        media_type = "audio/flac"
+    elif suffix == "ogg" or head.startswith(b"OggS"):
+        format_id = 0x0000
+        ext = suffix if suffix else "ogg"
+        media_type = "audio/ogg"
+    else:
+        format_id = 0x0000
+        ext = suffix if suffix else "bin"
+        if content_type and ("/" in content_type) and len(content_type) <= 128:
+            claimed_media = content_type.split(";")[0].strip().lower()
+            # If the payload is unverified arbitrary content, do not let an untrusted
+            # caller claim that non-WAV / non-MP3 data is audio/wav or audio/mpeg.
+            if claimed_media in ("audio/wav", "audio/x-wav", "audio/vnd.wave", "audio/mpeg", "audio/mp3"):
+                media_type = "application/octet-stream"
+            else:
+                media_type = claimed_media
+        else:
+            media_type = "application/octet-stream"
+
+    # Strict ASCII guarantees for MEDIA_TYPE and FILE_EXTENSION TLVs
+    clean_media_type = media_type.encode("ascii", "ignore").decode("ascii") or "application/octet-stream"
+    clean_ext = ext.encode("ascii", "ignore").decode("ascii") or "bin"
+
+    return format_id, basename, clean_media_type, clean_ext
+
+
+def create_container_v2(
+    vocal_path: Path,
+    music_path: Path,
+    output_path: Path,
+    *,
+    title: str = "",
+    artist: str = "",
+    vocal_filename: str | None = None,
+    music_filename: str | None = None,
+    vocal_content_type: str | None = None,
+    music_content_type: str | None = None,
+) -> V2File:
+    """Create a V2 container storing opaque source file bytes verbatim."""
+    vocal_fmt, vocal_name, vocal_media, vocal_ext = resolve_format_metadata(
+        vocal_path, vocal_filename, vocal_content_type
+    )
+    music_fmt, music_name, music_media, music_ext = resolve_format_metadata(
+        music_path, music_filename, music_content_type
+    )
+
+    streams = [
+        V2StreamInput(
+            stream_id=1,
+            source_path=vocal_path,
+            role=ROLE_AUDIO_PRIMARY,
+            format_id=vocal_fmt,
+            format_info=(
+                FormatInfoTLV(SOURCE_FILENAME, vocal_name.encode("utf-8")),
+                FormatInfoTLV(MEDIA_TYPE, vocal_media.encode("ascii")),
+                FormatInfoTLV(FILE_EXTENSION, vocal_ext.encode("ascii")),
+            ),
+        ),
+        V2StreamInput(
+            stream_id=2,
+            source_path=music_path,
+            role=ROLE_AUDIO_SUPPLEMENTAL,
+            format_id=music_fmt,
+            format_info=(
+                FormatInfoTLV(SOURCE_FILENAME, music_name.encode("utf-8")),
+                FormatInfoTLV(MEDIA_TYPE, music_media.encode("ascii")),
+                FormatInfoTLV(FILE_EXTENSION, music_ext.encode("ascii")),
+            ),
+        ),
+    ]
+
+    metadata = {
+        "schema_version": 1,
+        "title": title,
+        "artist": artist,
+        "vocal_filename": vocal_name,
+        "music_filename": music_name,
+        "created_utc": datetime.now(UTC).isoformat(),
+        "stream_labels": {
+            "1": f"Vocal ({vocal_ext.upper()})" if vocal_ext else "Vocal",
+            "2": f"Music ({music_ext.upper()})" if music_ext else "Music",
+        },
+    }
+
+    create_vma_v2(streams, output_path, metadata=metadata)
+    container = read_vma_any(output_path)
+    if not isinstance(container, V2File):
+        raise VMAError("expected V2 container after creation")
+    return container
+
+
 def create_container(
     vocal_path: Path,
     music_path: Path,
@@ -67,16 +198,98 @@ def create_container(
     artist: str,
     vocal_start_sample: int = 0,
     music_start_sample: int = 0,
-) -> VMAFile:
-    create_vma(
+    version: int | None = None,
+    vocal_filename: str | None = None,
+    music_filename: str | None = None,
+    vocal_content_type: str | None = None,
+    music_content_type: str | None = None,
+) -> VMAFile | V2File:
+    """Create a VMA container with format-agnostic version dispatch.
+
+    - If version=1: strictly validate PCM WAV and create V1. Fails if invalid.
+    - If version=2: create V2 storing opaque payload bytes verbatim.
+    - If version is None:
+      - If both inputs are valid PCM WAVs, create V1 (preserving default behavior).
+      - If either input is unsupported by V1 (e.g. MP3), automatically create V2.
+    """
+    if version not in (None, 1, 2):
+        raise HTTPException(400, f"unsupported VMA version requested: {version}")
+
+    if vocal_start_sample < 0:
+        raise VMAError("vocal_start_sample must be >= 0")
+    if music_start_sample < 0:
+        raise VMAError("music_start_sample must be >= 0")
+
+    if version == 2:
+        return create_container_v2(
+            vocal_path,
+            music_path,
+            output_path,
+            title=title,
+            artist=artist,
+            vocal_filename=vocal_filename,
+            music_filename=music_filename,
+            vocal_content_type=vocal_content_type,
+            music_content_type=music_content_type,
+        )
+
+    if version == 1:
+        parse_pcm_wav(vocal_path)
+        parse_pcm_wav(music_path)
+        create_vma(
+            vocal_path,
+            music_path,
+            output_path,
+            {"title": title, "artist": artist},
+            vocal_start_sample=vocal_start_sample,
+            music_start_sample=music_start_sample,
+        )
+        return read_vma_any(output_path)
+
+    # version is None: auto-detect
+    vocal_ext = Path(vocal_filename or vocal_path.name).suffix.lower()
+    music_ext = Path(music_filename or music_path.name).suffix.lower()
+    both_declared_wav = (vocal_ext == ".wav" and music_ext == ".wav")
+
+    try:
+        parse_pcm_wav(vocal_path)
+        parse_pcm_wav(music_path)
+        create_vma(
+            vocal_path,
+            music_path,
+            output_path,
+            {"title": title, "artist": artist},
+            vocal_start_sample=vocal_start_sample,
+            music_start_sample=music_start_sample,
+        )
+        return read_vma_any(output_path)
+    except VMAError:
+        # If both files declared themselves as .wav, but one is not even a valid
+        # RIFF/WAVE file (e.g. invalid or corrupt WAV upload), re-raise the error.
+        if both_declared_wav:
+            v_head = b""
+            m_head = b""
+            try:
+                with vocal_path.open("rb") as f:
+                    v_head = f.read(12)
+                with music_path.open("rb") as f:
+                    m_head = f.read(12)
+            except OSError:
+                pass
+            if not is_riff_wave(v_head) or not is_riff_wave(m_head):
+                raise
+
+    return create_container_v2(
         vocal_path,
         music_path,
         output_path,
-        {"title": title, "artist": artist},
-        vocal_start_sample=vocal_start_sample,
-        music_start_sample=music_start_sample,
+        title=title,
+        artist=artist,
+        vocal_filename=vocal_filename,
+        music_filename=music_filename,
+        vocal_content_type=vocal_content_type,
+        music_content_type=music_content_type,
     )
-    return read_vma_any(output_path)
 
 
 def read_container(vma_path: str | Path) -> VMAFile | V2File:
@@ -152,7 +365,7 @@ def v2_stream_payload(stream, metadata: dict[str, Any] | None) -> dict[str, Any]
         "role": descriptor.role,
         "role_name": _ROLE_NAMES.get(descriptor.role, "RESERVED"),
         "format_id": descriptor.format_id,
-        "format_name": lookup.entry.canonical_name if lookup.known else None,
+        "format_name": lookup.entry.canonical_name if lookup.entry is not None else None,
         "format_range": lookup.range.value,
         "start_seconds": descriptor.start_time / NANOSECONDS_PER_SECOND,
         "duration_seconds": (descriptor.duration / NANOSECONDS_PER_SECOND) if descriptor.duration else None,
@@ -197,7 +410,7 @@ def stream_label(descriptor, info: dict[str, str], metadata: dict[str, Any] | No
     if info.get("source_filename"):
         return info["source_filename"]
     lookup = FORMAT_REGISTRY.lookup(descriptor.format_id)
-    if lookup.known:
+    if lookup.entry is not None:
         return lookup.entry.canonical_name
     return f"Stream {descriptor.stream_id}"
 

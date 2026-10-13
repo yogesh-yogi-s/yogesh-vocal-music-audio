@@ -15,18 +15,18 @@
 
     <section class="workspace-grid" aria-label="VMA workspace">
       <section class="card create-card" aria-labelledby="create-heading">
-        <div class="section-heading"><div><p class="section-kicker">New container</p><h2 id="create-heading">Create VMA</h2></div><p>Package two original PCM WAV streams into one synchronized VMA file.</p></div>
+        <div class="section-heading"><div><p class="section-kicker">New container</p><h2 id="create-heading">Create VMA</h2></div><p>Package original vocal and music streams (any file format or binary payload) into a synchronized VMA file.</p></div>
         <form id="create-form" novalidate>
           <div class="files">
-            <label class="file-field">Vocal WAV<input id="vocal-input" name="vocal" type="file" accept="audio/wav,.wav" required aria-describedby="source-info"><span>Choose a vocal WAV file</span></label>
-            <label class="file-field">Music / Instrumental WAV<input id="music-input" name="music" type="file" accept="audio/wav,.wav" required aria-describedby="source-info"><span>Choose a music WAV file</span></label>
+            <label class="file-field">Vocal stream<input id="vocal-input" name="vocal" type="file" required aria-describedby="source-info"><span>Choose a vocal stream or file</span></label>
+            <label class="file-field">Music / Instrumental stream<input id="music-input" name="music" type="file" required aria-describedby="source-info"><span>Choose a music or payload file</span></label>
           </div>
           <div class="fields">
             <label>Song title <span class="optional">Optional</span><input name="title" maxlength="200" placeholder="e.g. Session mix"></label>
             <label>Artist <span class="optional">Optional</span><input name="artist" maxlength="200" placeholder="e.g. Artist name"></label>
           </div>
-          <div id="source-info" class="source-info">Choose two PCM WAV files: mono or stereo, 8/16/24/32-bit.</div>
-          <div class="form-footer"><button class="button button-primary" type="submit">Create VMA</button><p class="form-note">Streams are stored separately and losslessly.</p></div>
+          <div id="source-info" class="source-info">Choose two files (any audio format, unknown format, or binary payload). Valid PCM WAV pairs create a playable V1 container; other formats create a byte-exact V2 container with direct extraction (playback is format-dependent).</div>
+          <div class="form-footer"><button class="button button-primary" type="submit">Create VMA</button><p class="form-note">Streams are stored separately and byte-exact without transcoding.</p></div>
         </form>
         <p id="create-status" class="status" aria-live="polite"></p>
         <a id="download-vma" class="download button button-secondary hidden" download="song.vma">Download song.vma</a>
@@ -64,7 +64,7 @@
       </section>
     </section>
 
-    <aside class="how-it-works" aria-labelledby="how-heading"><div class="how-number" aria-hidden="true">01</div><div><p class="section-kicker">Container concept</p><h2 id="how-heading">How VMA works</h2><p>Separate original Vocal and Music / Instrumental audio streams are stored inside one VMA container. During playback, the streams are synchronized and can be controlled independently. The original streams can later be extracted without AI vocal separation.</p></div></aside>
+    <aside class="how-it-works" aria-labelledby="how-heading"><div class="how-number" aria-hidden="true">01</div><div><p class="section-kicker">Container concept</p><h2 id="how-heading">How VMA works</h2><p>Separate original Vocal and Music / Instrumental streams are stored inside one VMA container. Valid PCM WAV streams support synchronized browser playback, while V2 containers store any format or binary payload byte-exact with direct extraction.</p></div></aside>
   </main>
   <script src="/js/app.js?v=0.3.0"></script>
 </body>
