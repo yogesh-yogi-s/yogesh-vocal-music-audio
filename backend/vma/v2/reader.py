@@ -10,7 +10,7 @@ import json
 from pathlib import Path
 from typing import BinaryIO
 
-from vma.models import VMAError
+from ..models import VMAError
 
 from .constants import (
     DESCRIPTOR_FIXED_SIZE_V2,

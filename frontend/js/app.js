@@ -47,14 +47,35 @@ async function openSession(session) {
   if (!response.ok) throw new Error(await responseError(response));
   await activateVma(await response.json());
 }
-async function activateVma(payload) { state.session = payload.session_id; state.meta = payload; state.buffers = {}; state.position = 0; showDetails(payload); await loadBuffers(); }
+async function activateVma(payload) {
+  state.session = payload.session_id; state.meta = payload; state.buffers = {}; state.position = 0;
+  const isV2 = payload.version === 2;
+  showDetails(payload);
+  if (isV2) return; // V2 is open/inspect/extract only and never enters the V1 playback path.
+  await loadBuffers();
+}
 
+function v1StreamCard(stream) {
+  return `<article class="stream"><h3>${escapeHtml(stream.stream_type)}</h3><div>${escapeHtml(String(stream.codec))}</div><div>${stream.audio.sample_rate} Hz · ${stream.audio.channels === 1 ? 'Mono' : 'Stereo'} · ${stream.audio.bit_depth}-bit</div><div>Start ${stream.start_seconds.toFixed(3)}s · ${stream.duration_seconds.toFixed(3)}s</div></article>`;
+}
+function v2StreamCard(stream) {
+  const format = stream.format_name ? `${stream.format_name} (0x${stream.format_id.toString(16).padStart(4, '0')})` : `FORMAT_ID 0x${stream.format_id.toString(16).padStart(4, '0')}`;
+  const duration = stream.duration_seconds ? ` · ${stream.duration_seconds.toFixed(3)}s` : '';
+  return `<article class="stream"><h3>${escapeHtml(stream.label)}</h3><div>${escapeHtml(stream.role_name)} · ${escapeHtml(format)}</div><div>${(stream.payload_size / 1024 / 1024).toFixed(2)} MB${duration} · Start ${stream.start_seconds.toFixed(3)}s</div><a class="download button button-secondary" href="/api/vma/${state.session}/extract-stream/${stream.stream_id}" download="${escapeHtml(stream.download_filename)}">Download ${escapeHtml(stream.download_filename)}</a></article>`;
+}
 function showDetails(data) {
-  const title = data.metadata.title || 'Untitled'; const artist = data.metadata.artist || '—';
-  $('metadata-list').innerHTML = `<dt>Song</dt><dd>${escapeHtml(title)}</dd><dt>Artist</dt><dd>${escapeHtml(artist)}</dd><dt>Duration</dt><dd>${fmtTime(data.duration_seconds)}</dd>`;
-  $('stream-list').innerHTML = data.streams.map((s) => `<article class="stream"><h3>${escapeHtml(s.stream_type)}</h3><div>${s.codec}</div><div>${s.audio.sample_rate} Hz · ${s.audio.channels === 1 ? 'Mono' : 'Stereo'} · ${s.audio.bit_depth}-bit</div><div>Start ${s.start_seconds.toFixed(3)}s · ${s.duration_seconds.toFixed(3)}s</div></article>`).join('');
-  $('seek').max = data.duration_seconds; $('seek').value = 0; updateTime(); $('vma-details').classList.remove('hidden');
-  ['vocal', 'music'].forEach((kind) => { $(`extract-${kind}`).href = `/api/vma/${state.session}/extract/${kind}`; }); $('extract-all').href = `/api/vma/${state.session}/extract-all`;
+  const isV2 = data.version === 2; const metadata = data.metadata || {};
+  const title = metadata.title || 'Untitled'; const artist = metadata.artist || '—';
+  const duration = Number(data.duration_seconds) || 0;
+  $('metadata-list').innerHTML = `<dt>Container</dt><dd>VMA v${data.version}</dd><dt>Song</dt><dd>${escapeHtml(title)}</dd><dt>Artist</dt><dd>${escapeHtml(artist)}</dd><dt>Duration</dt><dd>${duration ? fmtTime(duration) : 'Unknown'}</dd>`;
+  $('stream-list').innerHTML = isV2 ? data.streams.map(v2StreamCard).join('') : data.streams.map(v1StreamCard).join('');
+  $('player-panel').classList.toggle('hidden', isV2); $('extract-panel').classList.toggle('hidden', isV2);
+  ['play', 'pause', 'stop'].forEach((id) => { $(id).disabled = isV2; });
+  if (!isV2) {
+    $('seek').max = duration; $('seek').value = 0; updateTime();
+    ['vocal', 'music'].forEach((kind) => { $(`extract-${kind}`).href = `/api/vma/${state.session}/extract/${kind}`; }); $('extract-all').href = `/api/vma/${state.session}/extract-all`;
+  }
+  $('vma-details').classList.remove('hidden');
 }
 
 async function loadBuffers() {
@@ -63,7 +84,7 @@ async function loadBuffers() {
 }
 function ensureAudio() { if (state.context) return; state.context = new AudioContext(); state.master = state.context.createGain(); state.master.connect(state.context.destination); ['vocal', 'music'].forEach((kind) => { const gain = state.context.createGain(); gain.connect(state.master); state.gains[kind] = gain; }); syncGains(); }
 function syncGains() { if (!state.master) return; state.master.gain.value = +$('master-volume').value; for (const kind of ['vocal', 'music']) state.gains[kind].gain.value = state.muted[kind] ? 0 : +$(`${kind}-volume`).value; }
-function start() { if (!state.meta || state.playing) return; ensureAudio(); state.context.resume(); state.startedAt = state.context.currentTime - state.position; state.sources = {}; for (const stream of state.meta.streams) { const kind = stream.stream_type; const buffer = state.buffers[kind]; const source = state.context.createBufferSource(); source.buffer = buffer; source.connect(state.gains[kind]); const start = stream.start_seconds; if (state.position < start + buffer.duration) { const when = state.context.currentTime + Math.max(0, start - state.position); const offset = Math.max(0, state.position - start); source.start(when, offset); state.sources[kind] = source; } } state.playing = true; tick(); }
+function start() { if (!state.meta || state.playing || state.meta.version === 2) return; ensureAudio(); state.context.resume(); state.startedAt = state.context.currentTime - state.position; state.sources = {}; for (const stream of state.meta.streams) { const kind = stream.stream_type; const buffer = state.buffers[kind]; const source = state.context.createBufferSource(); source.buffer = buffer; source.connect(state.gains[kind]); const start = stream.start_seconds; if (state.position < start + buffer.duration) { const when = state.context.currentTime + Math.max(0, start - state.position); const offset = Math.max(0, state.position - start); source.start(when, offset); state.sources[kind] = source; } } state.playing = true; tick(); }
 function pause() { if (!state.playing) return; state.position = currentPosition(); clearSources(); state.playing = false; updateTime(); }
 function stop() { clearSources(); state.playing = false; state.position = 0; $('seek').value = 0; updateTime(); }
 function clearSources() { Object.values(state.sources).forEach((source) => { try { source.stop(); } catch {} }); state.sources = {}; clearInterval(state.timer); state.timer = null; }

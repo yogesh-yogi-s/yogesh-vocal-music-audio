@@ -14,7 +14,7 @@ Browser (vanilla JS, frontend/)
        └─ UUID job directory in a process-lifetime temp dir
             └─ backend/vma library (no I/O dependencies)
                  ├─ v1/       PCM WAV only, exactly two streams, frozen
-                 ├─ v2/       opaque byte container, frozen, LIBRARY-ONLY
+                 ├─ v2/       opaque byte container, frozen; reachable via API/UI
                  ├─ formats/  recognition only (no decode)
                  └─ dispatch  read_vma_any() routes by version field
   ← GET  /api/vma/{id}/stream/{kind}             → re-extracts WAV to disk every call
@@ -78,6 +78,22 @@ Browser (vanilla JS, frontend/)
 - Dockerfile for a reproducible single-command run.
 - **Outcome:** the project is adoptable, installable, and reproducible.
 
+### Phase 1a — V2 reachable (completed)
+
+- `read_vma_any` (version dispatch), the V2 reader/extractor, and the V2 writer are
+  exported from the top-level `vma` package.
+- `/api/open` and `/api/vma/{id}` are version-aware and report `version == 2` with
+  generic V2 stream descriptors (role, FORMAT_ID, start/duration, payload size,
+  FORMAT_INFO filename/media type). V1 payload shapes are unchanged.
+- `GET /api/vma/{id}/extract-stream/{stream_id}` extracts one stream **byte-for-byte**.
+- The UI renders V2 streams with per-stream downloads and keeps V2 out of the V1-only
+  playback and bulk-extraction paths (those routes return `409` for V2).
+- **Not in scope:** V2 playback, MP3 recognition/decoding, transcoding, compression,
+  source separation, and any V3 container. V2 playback stays gated on a future design
+  that supplies a sealed clock and per-stream decode.
+- **Outcome:** an MP3 or any opaque payload round-trips through the app exactly and can
+  be recovered, without weakening the frozen V1/V2 contracts.
+
 ### Phase 1 — Reachable
 
 - One-click deploy and a pre-loaded demo container so a visitor hears synchronized
@@ -112,6 +128,7 @@ Browser (vanilla JS, frontend/)
 | Phase | Measure |
 |---|---|
 | 0 | CI green; `pip install .` succeeds; container image builds. |
+| 1a | V2 `/api/open` reports `version == 2`; every extracted V2 stream matches the source SHA-256. |
 | 1 | Time-to-first-playback for a new visitor under 30 s (demo path). |
 | 2 | Median session load under 5 s on a mobile network; no event-loop stalls. |
 | 3 | Share of sessions started without pre-existing stems. |

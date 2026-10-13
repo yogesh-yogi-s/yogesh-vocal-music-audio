@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 from typing import Any, Iterable
 
-from vma.models import VMAError
+from ..models import VMAError
 
 from .constants import HEADER_SIZE_V2, MAGIC, MAX_STREAMS_V2, VERSION_V2
 from .format_info import FormatInfoError, FormatInfoTLV, serialize_format_info

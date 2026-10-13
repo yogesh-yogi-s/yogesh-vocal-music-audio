@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Mapping
 
-from vma.models import VMAError
+from ..models import VMAError
 
 from .models import V2File, V2Stream
 from .reader import read_vma_v2

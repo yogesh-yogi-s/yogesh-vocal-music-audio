@@ -47,7 +47,7 @@
       <div class="metadata-panel"><dl id="metadata-list" class="details"></dl></div>
       <div id="stream-list" class="streams" aria-label="VMA stream metadata"></div>
 
-      <section class="player card" aria-labelledby="player-heading">
+      <section id="player-panel" class="player card" aria-labelledby="player-heading">
         <div class="player-heading"><div><p class="section-kicker">Synchronized playback</p><h2 id="player-heading">Player</h2></div><output id="time" class="time-readout">0:00 / 0:00</output></div>
         <div class="transport"><div class="transport-buttons"><button id="play" class="button button-primary" type="button">Play</button><button id="pause" class="button button-secondary" type="button">Pause</button><button id="stop" class="button button-quiet" type="button">Stop</button></div><label class="timeline-label">Playback position<input id="seek" type="range" min="0" max="0" value="0" step="0.01" aria-label="Seek playback position"></label></div>
         <div class="master-control"><label>Master volume<input id="master-volume" type="range" min="0" max="1" value="1" step="0.01" aria-label="Master volume"></label></div>
@@ -57,7 +57,7 @@
         </div>
       </section>
 
-      <section class="extraction card" aria-labelledby="extract-heading">
+      <section id="extract-panel" class="extraction card" aria-labelledby="extract-heading">
         <div class="section-heading"><div><p class="section-kicker">Original streams</p><h2 id="extract-heading">Extract tracks</h2></div><p>Recover the original stored streams without AI vocal separation.</p></div>
         <div class="actions"><a id="extract-vocal" class="download button button-secondary">Extract Vocal</a><a id="extract-music" class="download button button-secondary">Extract Music</a><a id="extract-all" class="download button button-primary">Extract Both</a></div>
         <p id="extract-status" class="status" aria-live="polite"></p>
