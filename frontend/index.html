@@ -46,6 +46,7 @@
       <div class="section-intro"><div><p class="section-kicker">Current container</p><h2>VMA information</h2></div><p>Metadata and stream properties are read directly from the opened container.</p></div>
       <div class="metadata-panel"><dl id="metadata-list" class="details"></dl></div>
       <div id="stream-list" class="streams" aria-label="VMA stream metadata"></div>
+      <p id="v2-playback-notice" class="source-info hidden" role="status">VMA v2 preserves original stream bytes. Browser-native playback is checked for each stream; downloads remain byte-exact.</p>
 
       <section id="player-panel" class="player card" aria-labelledby="player-heading">
         <div class="player-heading"><div><p class="section-kicker">Synchronized playback</p><h2 id="player-heading">Player</h2></div><output id="time" class="time-readout">0:00 / 0:00</output></div>
@@ -64,8 +65,8 @@
       </section>
     </section>
 
-    <aside class="how-it-works" aria-labelledby="how-heading"><div class="how-number" aria-hidden="true">01</div><div><p class="section-kicker">Container concept</p><h2 id="how-heading">How VMA works</h2><p>Separate original Vocal and Music / Instrumental streams are stored inside one VMA container. Valid PCM WAV streams support synchronized browser playback, while V2 containers store any format or binary payload byte-exact with direct extraction.</p></div></aside>
+    <aside class="how-it-works" aria-labelledby="how-heading"><div class="how-number" aria-hidden="true">01</div><div><p class="section-kicker">Container concept</p><h2 id="how-heading">How VMA works</h2><p>Separate original Vocal and Music / Instrumental streams are stored inside one VMA container. Browser-native decoding can play supported source formats together; V2 containers always keep their original bytes available for direct extraction.</p></div></aside>
   </main>
-  <script src="/js/app.js?v=0.3.0"></script>
+  <script src="/js/app.js?v=0.3.1"></script>
 </body>
 </html>

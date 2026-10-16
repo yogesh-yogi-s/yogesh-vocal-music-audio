@@ -7,6 +7,7 @@ payload byte-for-byte, while V2 never enters the V1-only playback path.
 
 import hashlib
 
+import pytest
 from fastapi.testclient import TestClient
 
 from backend.app.main import app
@@ -217,6 +218,38 @@ def test_create_v2_with_wav_and_mp3_auto_detects_and_preserves_bytes(tmp_path):
         assert ext2.content == mp3_bytes
         assert hashlib.sha256(ext2.content).hexdigest() == hashlib.sha256(mp3_bytes).hexdigest()
         assert ext2.headers["content-type"].startswith("audio/mpeg")
+
+
+@pytest.mark.parametrize(
+    ("filename", "content_type", "payload"),
+    [
+        ("vocal.m4a", "audio/mp4", b"\x00\x00\x00\x18ftypM4A \x00\x00\x00\x00isom" + bytes(range(32))),
+        ("music.ogg", "audio/ogg", b"OggS\x00\x02" + bytes(range(48))),
+    ],
+)
+def test_v2_preserves_aac_m4a_and_ogg_named_payloads_without_decoding(tmp_path, filename, content_type, payload):
+    """Playback capability must never change V2's opaque storage/extraction contract."""
+    other = tmp_path / "other.dat"
+    other_bytes = bytes(range(255, -1, -1))
+    other.write_bytes(other_bytes)
+    with TestClient(app) as client:
+        created = client.post(
+            "/api/create",
+            files={
+                "vocal": (filename, payload, content_type),
+                "music": ("other.dat", other_bytes, "application/octet-stream"),
+            },
+        )
+        assert created.status_code == 200, created.text
+        assert created.headers["X-VMA-Version"] == "2"
+        session = created.headers["X-VMA-Session"]
+        inspected = client.get(f"/api/vma/{session}")
+        assert inspected.status_code == 200
+        assert inspected.json()["version"] == 2
+        for stream_id, original in ((1, payload), (2, other_bytes)):
+            extracted = client.get(f"/api/vma/{session}/extract-stream/{stream_id}")
+            assert extracted.status_code == 200
+            assert hashlib.sha256(extracted.content).digest() == hashlib.sha256(original).digest()
 
 
 def test_create_v2_explicit_version_2_forces_v2_for_two_wavs(tmp_path):
