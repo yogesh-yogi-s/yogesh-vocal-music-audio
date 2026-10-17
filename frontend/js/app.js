@@ -1,4 +1,4 @@
-const state = { session: null, meta: null, context: null, master: null, gains: {}, buffers: {}, sources: {}, position: 0, startedAt: 0, playing: false, muted: { vocal: false, music: false }, timer: null, activation: 0, duration: 0, playbackStreams: {}, playbackStates: {}, playbackReady: false, playbackLoading: false };
+const state = { session: null, meta: null, context: null, master: null, gains: {}, buffers: {}, sources: {}, position: 0, startedAt: 0, playing: false, scrubbing: false, muted: { vocal: false, music: false }, timer: null, activation: 0, duration: 0, playbackStreams: {}, playbackStates: {}, playbackReady: false, playbackLoading: false };
 const $ = (id) => document.getElementById(id);
 const fmtTime = (seconds) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
 
@@ -64,7 +64,7 @@ $('open-form').addEventListener('submit', handleOpenSubmit);
 function beginVmaTransition() {
   const activation = ++state.activation;
   stop();
-  state.session = null; state.meta = null; state.buffers = {}; state.playbackStreams = {}; state.playbackStates = {}; state.position = 0; state.duration = 0; state.playbackReady = false; state.playbackLoading = false;
+  state.session = null; state.meta = null; state.buffers = {}; state.playbackStreams = {}; state.playbackStates = {}; state.position = 0; state.duration = 0; state.playbackReady = false; state.playbackLoading = false; state.scrubbing = false;
   $('metadata-list').innerHTML = ''; $('stream-list').innerHTML = ''; status('open-status', ''); $('v2-playback-notice').textContent = '';
   $('vma-details').classList.add('hidden'); $('player-panel').classList.add('hidden'); $('v2-playback-notice').classList.add('hidden'); $('extract-panel').classList.add('hidden');
   ['play', 'pause', 'stop'].forEach((id) => { $(id).disabled = true; });
@@ -156,14 +156,18 @@ function ensureAudio() { if (state.context) return; state.context = new AudioCon
 function syncGains() { if (!state.master) return; state.master.gain.value = +$('master-volume').value; for (const kind of ['vocal', 'music']) state.gains[kind].gain.value = state.muted[kind] ? 0 : +$(`${kind}-volume`).value; }
 async function start() { if (!state.meta || state.playing || !state.playbackReady) return; const activation = state.activation; ensureAudio(); try { await state.context.resume(); } catch { if (activation === state.activation) status('open-status', 'Browser playback could not start. Interact with the page and try Play again.', true); return; } if (activation !== state.activation || !state.playbackReady || state.playing) return; state.startedAt = state.context.currentTime - state.position; state.sources = {}; for (const [kind, { stream, buffer }] of Object.entries(state.playbackStreams)) { if (!buffer) continue; const source = state.context.createBufferSource(); source.buffer = buffer; source.connect(state.gains[kind]); const start = stream.start_seconds || 0; if (state.position < start + buffer.duration) { const when = state.context.currentTime + Math.max(0, start - state.position); const offset = Math.max(0, state.position - start); source.start(when, offset); state.sources[kind] = source; } } state.playing = true; tick(); }
 function pause() { if (!state.playing) return; state.position = currentPosition(); clearSources(); state.playing = false; updateTime(); }
-function stop() { clearSources(); state.playing = false; state.position = 0; $('seek').value = 0; updateTime(); }
+function stop() { clearSources(); state.playing = false; state.scrubbing = false; state.position = 0; $('seek').value = 0; updateTime(); }
 function clearSources() { Object.values(state.sources).forEach((source) => { try { source.stop(); } catch {} }); state.sources = {}; clearInterval(state.timer); state.timer = null; }
 function currentPosition() { return Math.min(state.duration || 0, Math.max(0, state.context.currentTime - state.startedAt)); }
-function tick() { clearInterval(state.timer); state.timer = setInterval(() => { if (!state.playing) return; state.position = currentPosition(); if (state.position >= state.duration) { stop(); return; } $('seek').value = state.position; updateTime(); }, 80); }
-function updateTime() { $('time').textContent = `${fmtTime(state.position)} / ${fmtTime(state.duration || 0)}`; }
+function tick() { clearInterval(state.timer); state.timer = setInterval(() => { if (!state.playing || state.scrubbing) return; state.position = currentPosition(); if (state.position >= state.duration) { stop(); return; } $('seek').value = state.position; updateTime(); }, 80); }
+function boundedPosition(value) { const position = Number(value); return Math.min(state.duration || 0, Math.max(0, Number.isFinite(position) ? position : 0)); }
+function previewSeek(event) { state.scrubbing = true; updateTime(boundedPosition(event.target.value)); }
+function commitSeek(event) { const wasPlaying = state.playing; clearSources(); state.playing = false; state.scrubbing = false; state.position = boundedPosition(event.target.value); $('seek').value = state.position; updateTime(); if (wasPlaying && state.position < state.duration) start(); }
+function updateTime(position = state.position) { $('time').textContent = `${fmtTime(position)} / ${fmtTime(state.duration || 0)}`; }
 function escapeHtml(value) { const node = document.createElement('span'); node.textContent = value; return node.innerHTML; }
 $('play').addEventListener('click', start); $('pause').addEventListener('click', pause); $('stop').addEventListener('click', stop);
-$('seek').addEventListener('change', (event) => { state.position = +event.target.value; if (state.playing) { clearSources(); state.playing = false; start(); } updateTime(); });
+$('seek').addEventListener('input', previewSeek);
+$('seek').addEventListener('change', commitSeek);
 ['master-volume', 'vocal-volume', 'music-volume'].forEach((id) => $(id).addEventListener('input', syncGains));
 ['vocal', 'music'].forEach((kind) => $(`${kind}-mute`).addEventListener('click', () => { state.muted[kind] = !state.muted[kind]; $(`${kind}-mute`).textContent = state.muted[kind] ? `Unmute ${kind}` : `Mute ${kind}`; syncGains(); }));
 ['vocal', 'music', 'all'].forEach((kind) => $(`extract-${kind}`).addEventListener('click', (event) => { if (!state.session) return; status('extract-status', `Preparing ${kind === 'all' ? 'both tracks' : `${kind} track`} download…`); window.setTimeout(() => status('extract-status', 'Download started.'), 250); }));

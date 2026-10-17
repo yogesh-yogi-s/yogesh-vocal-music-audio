@@ -151,8 +151,8 @@ def test_frontend_script_handles_api_errors_work_states_and_shared_playback_cloc
     assert "const activation = state.activation;" in script
     assert "activation !== state.activation || !state.playbackReady" in script
     assert "source.start(when, offset)" in script
-    assert "$('seek').addEventListener('change'" in script
-    assert "$('seek').addEventListener('input'" not in script
+    assert "$('seek').addEventListener('input', previewSeek)" in script
+    assert "$('seek').addEventListener('change', commitSeek)" in script
 
 def test_frontend_direct_open_invalidates_failed_stale_and_rapid_transitions():
     """Exercise direct-open races with controlled promises; this does not test audible playback."""
@@ -245,7 +245,15 @@ const okResponse = (body) => ({ ok: true, json: async () => body });
   assert.equal(document.getElementById('open-status').textContent, 'Corrupt VMA file.');
   assert.equal(globalThis.__vmaTest.state.playbackReady, false);
 
-  await globalThis.__vmaTest.openSession('ready-again');
+  vmaInput.files = [{ name: 'ready-again.vma' }];
+  const recovery = deferred(); openRequests.push(recovery);
+  const recoveryOpen = submitOpen();
+  recovery.resolve(okResponse(payload('ready-again', 1))); await recoveryOpen;
+  assert.equal(globalThis.__vmaTest.state.session, 'ready-again');
+  assert.equal(globalThis.__vmaTest.state.playbackReady, true);
+  await globalThis.__vmaTest.start();
+  assert.equal(globalThis.__vmaTest.state.playing, true);
+
   vmaInput.files = [];
   await submitOpen();
   assert.equal(globalThis.__vmaTest.state.meta, null);
