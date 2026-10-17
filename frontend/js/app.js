@@ -23,40 +23,65 @@ async function describeWav(file) {
 }
 ['vocal-input', 'music-input'].forEach((id) => $(id).addEventListener('change', async () => { const summaries = await Promise.all([$('vocal-input').files[0], $('music-input').files[0]].map(describeWav)); $('source-info').textContent = summaries.filter(Boolean).join('  |  ') || 'Choose two files (any audio format, unknown format, or binary payload).'; }));
 
-$('create-form').addEventListener('submit', async (event) => {
+async function handleCreateSubmit(event) {
   event.preventDefault(); const form = event.currentTarget;
   if (!$('vocal-input').files[0] || !$('music-input').files[0]) { status('create-status', 'Select both a vocal and a music stream before creating VMA.', true); return; }
+  const activation = beginVmaTransition(); form.dataset.activation = String(activation);
   setWorking(form, true, 'Creating VMA…'); status('create-status', 'Creating VMA…'); $('download-vma').classList.add('hidden');
   try {
     const response = await fetch('/api/create', { method: 'POST', body: new FormData(event.target) });
+    if (activation !== state.activation) return;
     if (!response.ok) throw new Error(await responseError(response));
-    const url = URL.createObjectURL(await response.blob()); const link = $('download-vma');
+    const blob = await response.blob();
+    if (activation !== state.activation) return;
+    const url = URL.createObjectURL(blob); const link = $('download-vma');
     if (link.dataset.url) URL.revokeObjectURL(link.dataset.url); link.href = url; link.dataset.url = url; link.classList.remove('hidden');
     const session = response.headers.get('X-VMA-Session');
-    if (session) await openSession(session);
+    if (session) await openSession(session, activation);
+    if (activation !== state.activation) return;
     status('create-status', 'VMA created successfully.');
-  } catch (error) { status('create-status', error.message, true); } finally { setWorking(form, false); }
-});
+  } catch (error) { if (activation === state.activation) status('create-status', error.message, true); } finally { if (form.dataset.activation === String(activation)) setWorking(form, false); }
+}
+$('create-form').addEventListener('submit', handleCreateSubmit);
 
-$('open-form').addEventListener('submit', async (event) => {
+async function handleOpenSubmit(event) {
   event.preventDefault(); const form = event.currentTarget;
+  const activation = beginVmaTransition();
   if (!$('vma-input').files[0]) { status('open-status', 'Select a VMA file before opening it.', true); return; }
-  stop(); setWorking(form, true, 'Opening VMA…'); status('open-status', 'Validating VMA…');
+  form.dataset.activation = String(activation);
+  setWorking(form, true, 'Opening VMA…'); status('open-status', 'Validating VMA…');
   try {
     const response = await fetch('/api/open', { method: 'POST', body: new FormData(event.target) });
-    if (!response.ok) throw new Error(await responseError(response)); const payload = await response.json();
-    await activateVma(payload);
-  } catch (error) { status('open-status', error.message, true); } finally { setWorking(form, false); }
-});
-
-async function openSession(session) {
-  const response = await fetch(`/api/vma/${session}`);
-  if (!response.ok) throw new Error(await responseError(response));
-  await activateVma(await response.json());
+    if (activation !== state.activation) return;
+    if (!response.ok) throw new Error(await responseError(response));
+    const payload = await response.json();
+    if (activation !== state.activation) return;
+    await activateVma(payload, activation);
+  } catch (error) { if (activation === state.activation) status('open-status', error.message, true); } finally { if (form.dataset.activation === String(activation)) setWorking(form, false); }
 }
-async function activateVma(payload) {
+$('open-form').addEventListener('submit', handleOpenSubmit);
+
+function beginVmaTransition() {
   const activation = ++state.activation;
-  stop(); state.session = payload.session_id; state.meta = payload; state.buffers = {}; state.playbackStreams = {}; state.playbackStates = {}; state.position = 0; state.duration = 0; state.playbackReady = false; state.playbackLoading = true;
+  stop();
+  state.session = null; state.meta = null; state.buffers = {}; state.playbackStreams = {}; state.playbackStates = {}; state.position = 0; state.duration = 0; state.playbackReady = false; state.playbackLoading = false;
+  $('metadata-list').innerHTML = ''; $('stream-list').innerHTML = ''; status('open-status', ''); $('v2-playback-notice').textContent = '';
+  $('vma-details').classList.add('hidden'); $('player-panel').classList.add('hidden'); $('v2-playback-notice').classList.add('hidden'); $('extract-panel').classList.add('hidden');
+  ['play', 'pause', 'stop'].forEach((id) => { $(id).disabled = true; });
+  $('seek').max = 0; $('seek').value = 0; updateTime();
+  return activation;
+}
+async function openSession(session, activation = beginVmaTransition()) {
+  const response = await fetch(`/api/vma/${session}`);
+  if (activation !== state.activation) return;
+  if (!response.ok) throw new Error(await responseError(response));
+  const payload = await response.json();
+  if (activation !== state.activation) return;
+  await activateVma(payload, activation);
+}
+async function activateVma(payload, activation = beginVmaTransition()) {
+  if (activation !== state.activation) return;
+  state.session = payload.session_id; state.meta = payload; state.buffers = {}; state.playbackStreams = {}; state.playbackStates = {}; state.position = 0; state.duration = 0; state.playbackReady = false; state.playbackLoading = true;
   showDetails(payload);
   status('open-status', `Checking browser playback for VMA v${payload.version} streams…`);
   await loadBuffers(activation);
@@ -67,7 +92,6 @@ async function activateVma(payload) {
   showDetails(payload);
   status('open-status', activeVmaStatus(), !state.playbackReady);
 }
-
 function v1StreamCard(stream) {
   return `<article class="stream"><h3>${escapeHtml(stream.stream_type)}</h3><div>${escapeHtml(String(stream.codec))}</div><div>${stream.audio.sample_rate} Hz · ${stream.audio.channels === 1 ? 'Mono' : 'Stereo'} · ${stream.audio.bit_depth}-bit</div><div>Start ${stream.start_seconds.toFixed(3)}s · ${stream.duration_seconds.toFixed(3)}s</div></article>`;
 }
@@ -130,7 +154,7 @@ function v2PlaybackNotice() {
 }
 function ensureAudio() { if (state.context) return; state.context = new AudioContext(); state.master = state.context.createGain(); state.master.connect(state.context.destination); ['vocal', 'music'].forEach((kind) => { const gain = state.context.createGain(); gain.connect(state.master); state.gains[kind] = gain; }); syncGains(); }
 function syncGains() { if (!state.master) return; state.master.gain.value = +$('master-volume').value; for (const kind of ['vocal', 'music']) state.gains[kind].gain.value = state.muted[kind] ? 0 : +$(`${kind}-volume`).value; }
-async function start() { if (!state.meta || state.playing || !state.playbackReady) return; const activation = state.activation; ensureAudio(); try { await state.context.resume(); } catch { status('open-status', 'Browser playback could not start. Interact with the page and try Play again.', true); return; } if (activation !== state.activation || !state.playbackReady || state.playing) return; state.startedAt = state.context.currentTime - state.position; state.sources = {}; for (const [kind, { stream, buffer }] of Object.entries(state.playbackStreams)) { if (!buffer) continue; const source = state.context.createBufferSource(); source.buffer = buffer; source.connect(state.gains[kind]); const start = stream.start_seconds || 0; if (state.position < start + buffer.duration) { const when = state.context.currentTime + Math.max(0, start - state.position); const offset = Math.max(0, state.position - start); source.start(when, offset); state.sources[kind] = source; } } state.playing = true; tick(); }
+async function start() { if (!state.meta || state.playing || !state.playbackReady) return; const activation = state.activation; ensureAudio(); try { await state.context.resume(); } catch { if (activation === state.activation) status('open-status', 'Browser playback could not start. Interact with the page and try Play again.', true); return; } if (activation !== state.activation || !state.playbackReady || state.playing) return; state.startedAt = state.context.currentTime - state.position; state.sources = {}; for (const [kind, { stream, buffer }] of Object.entries(state.playbackStreams)) { if (!buffer) continue; const source = state.context.createBufferSource(); source.buffer = buffer; source.connect(state.gains[kind]); const start = stream.start_seconds || 0; if (state.position < start + buffer.duration) { const when = state.context.currentTime + Math.max(0, start - state.position); const offset = Math.max(0, state.position - start); source.start(when, offset); state.sources[kind] = source; } } state.playing = true; tick(); }
 function pause() { if (!state.playing) return; state.position = currentPosition(); clearSources(); state.playing = false; updateTime(); }
 function stop() { clearSources(); state.playing = false; state.position = 0; $('seek').value = 0; updateTime(); }
 function clearSources() { Object.values(state.sources).forEach((source) => { try { source.stop(); } catch {} }); state.sources = {}; clearInterval(state.timer); state.timer = null; }
