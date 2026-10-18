@@ -94,12 +94,14 @@ jobs:
           container="vma-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           cleanup() { docker rm --force "$container" >/dev/null 2>&1 || true; }
           trap cleanup EXIT
+          container_uid="$(docker run --rm --entrypoint python "$IMAGE_TAG" -c 'import os; print(os.getuid())')"
+          container_gid="$(docker run --rm --entrypoint python "$IMAGE_TAG" -c 'import os; print(os.getgid())')"
 
           docker run --detach --name "$container" \
             --publish 127.0.0.1::8000 \
             --read-only --cap-drop=ALL --security-opt=no-new-privileges:true \
             --memory 512m --cpus 1 --pids-limit 128 \
-            --tmpfs /tmp/vma:rw,noexec,nosuid,size=64m \
+            --tmpfs "/tmp/vma:rw,noexec,nosuid,size=64m,uid=${container_uid},gid=${container_gid},mode=0700" \
             --env VMA_ENVIRONMENT=production \
             --env VMA_TRUSTED_HOSTS=audio.example.test \
             --env VMA_ALLOWED_ORIGINS=https://audio.example.test \
