@@ -67,3 +67,208 @@ jobs:
       - name: Import the installed library from outside the repository
         working-directory: ${{ runner.temp }}
         run: python -c "import vma; print(vma.__all__)"
+
+  container-security:
+    name: Linux container smoke and security
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      # Use only synthetic example.test production settings. No secrets or
+      # external service are needed. Reports and the SPDX document stay under
+      # RUNNER_TEMP and are deleted with the hosted runner; nothing is uploaded.
+      - name: Build and smoke-test the production image
+        shell: bash
+        env:
+          IMAGE_TAG: vma-ci:${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          docker buildx version
+          docker buildx build --load --tag "$IMAGE_TAG" .
+          image_id="$(docker image inspect --format '{{.Id}}' "$IMAGE_TAG")"
+          echo "Tested image ID: $image_id"
+
+          container="vma-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          cleanup() { docker rm --force "$container" >/dev/null 2>&1 || true; }
+          trap cleanup EXIT
+
+          docker run --detach --name "$container" \
+            --publish 127.0.0.1::8000 \
+            --read-only --cap-drop=ALL --security-opt=no-new-privileges:true \
+            --memory 512m --cpus 1 --pids-limit 128 \
+            --tmpfs /tmp/vma:rw,noexec,nosuid,size=64m \
+            --env VMA_ENVIRONMENT=production \
+            --env VMA_TRUSTED_HOSTS=audio.example.test \
+            --env VMA_ALLOWED_ORIGINS=https://audio.example.test \
+            --env VMA_HEALTHCHECK_HOST=audio.example.test \
+            "$IMAGE_TAG"
+          test "$(docker image inspect --format '{{.Config.User}}' "$IMAGE_TAG")" = vma
+          echo "Container runs as the configured non-root vma user."
+
+          port="$(docker port "$container" 8000/tcp | sed 's/.*://')"
+          ready=false
+          for attempt in $(seq 1 30); do
+            if [ "$(docker inspect --format '{{.State.Health.Status}}' "$container")" = healthy ]; then
+              ready=true
+              break
+            fi
+            sleep 2
+          done
+          test "$ready" = true
+
+          python - "$port" <<'PY'
+          import http.client
+          import json
+          import sys
+
+          port = int(sys.argv[1])
+
+          def request(method, path, *, host="audio.example.test", origin=None):
+              headers = {"Host": host}
+              if origin:
+                  headers["Origin"] = origin
+              connection = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
+              connection.request(method, path, headers=headers)
+              response = connection.getresponse()
+              result = response.status, dict(response.getheaders()), response.read()
+              connection.close()
+              return result
+
+          status, _, body = request("GET", "/api/health")
+          assert status == 200 and json.loads(body) == {"status": "ok"}
+          status, _, body = request("GET", "/api/ready")
+          assert status == 200 and json.loads(body) == {"status": "ready"}
+          status, _, body = request("GET", "/")
+          assert status == 200 and body
+          status, _, body = request("GET", "/api/health", host="hostile.example")
+          assert status == 400 and json.loads(body) == {"detail": "invalid host header"}
+          status, headers, _ = request("POST", "/api/demo", origin="https://audio.example.test")
+          cookie = next(value for name, value in headers.items() if name.lower() == "set-cookie").lower()
+          assert status == 200 and all(flag in cookie for flag in ("httponly", "secure", "samesite=strict"))
+          print("production health/readiness, frontend, host rejection, and demo smoke: PASS")
+          PY
+
+          docker stop --time 15 "$container" >/dev/null
+          exit_code="$(docker inspect --format '{{.State.ExitCode}}' "$container")"
+          test "$exit_code" = 0
+          echo "Graceful container shutdown: PASS (exit $exit_code)"
+
+      - name: Install pinned pip-audit in a temporary virtual environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m venv "$RUNNER_TEMP/pip-audit-venv"
+          "$RUNNER_TEMP/pip-audit-venv/bin/python" -m pip install --disable-pip-version-check 'pip-audit==2.10.1'
+          "$RUNNER_TEMP/pip-audit-venv/bin/pip-audit" --version
+
+      - name: Audit runtime and development locks (zero known vulnerabilities)
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$RUNNER_TEMP/pip-audit-venv/bin/python" - <<'PY'
+          import json
+          import os
+          import subprocess
+          from pathlib import Path
+
+          executable = Path(os.environ["RUNNER_TEMP"]) / "pip-audit-venv/bin/pip-audit"
+          failed = False
+          for lock in ("requirements.lock", "requirements-dev.lock"):
+              result = subprocess.run(
+                  [str(executable), "-r", lock, "--format=json", "--progress-spinner=off"],
+                  check=False, capture_output=True, text=True,
+              )
+              try:
+                  report = json.loads(result.stdout)
+                  vulnerabilities = [
+                      vulnerability
+                      for dependency in report["dependencies"]
+                      for vulnerability in dependency.get("vulns", [])
+                  ]
+              except (json.JSONDecodeError, KeyError, TypeError) as error:
+                  raise SystemExit(f"pip-audit failed to produce valid JSON for {lock}: {error}")
+              print(f"{lock}: {len(vulnerabilities)} known vulnerabilities")
+              if result.returncode not in (0, 1):
+                  raise SystemExit(f"pip-audit execution failed for {lock} (exit {result.returncode})")
+              failed |= bool(vulnerabilities)
+          if failed:
+              raise SystemExit("pip-audit threshold exceeded: expected zero known vulnerabilities")
+          PY
+
+      - name: Scan image with Trivy and validate an ephemeral SPDX SBOM with Syft
+        shell: bash
+        env:
+          IMAGE_TAG: vma-ci:${{ github.run_id }}-${{ github.run_attempt }}
+          TRIVY_VERSION: 0.76.0
+          SYFT_VERSION: 1.54.1
+        run: |
+          set -euo pipefail
+          image_id="$(docker image inspect --format '{{.Id}}' "$IMAGE_TAG")"
+          echo "Trivy version: $TRIVY_VERSION"
+          echo "Syft version: $SYFT_VERSION"
+          echo "Scanned image ID: $image_id"
+
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+            "aquasec/trivy:$TRIVY_VERSION" --version
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+            "anchore/syft:v$SYFT_VERSION" version
+
+          "$RUNNER_TEMP/pip-audit-venv/bin/python" - "$IMAGE_TAG" "$image_id" "$TRIVY_VERSION" "$SYFT_VERSION" <<'PY'
+          import json
+          import subprocess
+          import sys
+
+          image, image_id, trivy_version, syft_version = sys.argv[1:]
+          trivy = subprocess.run(
+              ["docker", "run", "--rm", "-v", "/var/run/docker.sock:/var/run/docker.sock",
+               f"aquasec/trivy:{trivy_version}", "image", "--scanners", "vuln",
+               "--format", "json", image],
+              check=False, capture_output=True, text=True,
+          )
+          if trivy.returncode:
+              raise SystemExit(f"Trivy scan failed (exit {trivy.returncode})")
+          try:
+              scan = json.loads(trivy.stdout)
+              vulnerabilities = [
+                  vulnerability
+                  for result in scan.get("Results", [])
+                  for vulnerability in (result.get("Vulnerabilities") or [])
+              ]
+          except (json.JSONDecodeError, TypeError) as error:
+              raise SystemExit(f"Trivy returned invalid JSON: {error}")
+          high_critical = sum(
+              finding.get("Severity") in {"HIGH", "CRITICAL"}
+              for finding in vulnerabilities
+          )
+          print(f"Trivy: {len(vulnerabilities)} total vulnerabilities; {high_critical} HIGH/CRITICAL")
+          if high_critical:
+              raise SystemExit("Trivy threshold exceeded: zero HIGH/CRITICAL required")
+
+          syft = subprocess.run(
+              ["docker", "run", "--rm", "-v", "/var/run/docker.sock:/var/run/docker.sock",
+               f"anchore/syft:v{syft_version}", f"docker:{image}", "-o", "spdx-json"],
+              check=False, capture_output=True, text=True,
+          )
+          if syft.returncode:
+              raise SystemExit(f"Syft failed (exit {syft.returncode})")
+          try:
+              sbom = json.loads(syft.stdout)
+              assert sbom.get("spdxVersion", "").startswith("SPDX-")
+              assert sbom.get("documentNamespace")
+              packages = sbom.get("packages")
+              assert isinstance(packages, list) and packages
+          except (json.JSONDecodeError, AssertionError, TypeError) as error:
+              raise SystemExit(f"Syft output is not a valid non-empty SPDX SBOM: {error}")
+          print(
+              f"SPDX SBOM: valid {sbom['spdxVersion']}, {len(packages)} packages; "
+              f"bound to tested image ID {image_id}; kept in memory only"
+          )
+          PY
+
+          # Scope/threshold documentation: Trivy scans vulnerabilities in the
+          # image's OS and language packages; only HIGH/CRITICAL block this job.
+          # No vulnerability ignore list is used. Trivy misconfiguration,
+          # secret, and license scanners are intentionally outside this job.
