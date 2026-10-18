@@ -35,7 +35,11 @@ from backend.vma.v2.format_info import FILE_EXTENSION, MEDIA_TYPE, SOURCE_FILENA
 from backend.vma.v2.models import V2File
 
 MAX_UPLOAD_BYTES = 500 * 1024 * 1024
+MAX_SOURCE_FILENAME_BYTES = 255
 NANOSECONDS_PER_SECOND = 1_000_000_000
+_MEDIA_TYPE_TOKEN_CHARS = frozenset(
+    "!#$%&'*+-.^_`|~0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+)
 
 # V2 roles are generic; vocal/music are application-level labels, so the raw
 # u16 role is always reported and only known values are named.
@@ -49,19 +53,57 @@ _ROLE_NAMES = {
 
 async def store_upload(upload: UploadFile, destination: Path) -> Path:
     """Save an upload under an application-chosen filename and enforce a size limit."""
+    if upload.size is not None and upload.size > MAX_UPLOAD_BYTES:
+        raise HTTPException(413, "uploads are limited to 500 MiB each")
+
     total = 0
-    with destination.open("wb") as output:
-        while chunk := await upload.read(1024 * 1024):
-            total += len(chunk)
-            if total > MAX_UPLOAD_BYTES:
-                output.close()
-                destination.unlink(missing_ok=True)
-                raise HTTPException(413, "uploads are limited to 500 MB each")
-            output.write(chunk)
+    try:
+        with destination.open("wb") as output:
+            while chunk := await upload.read(1024 * 1024):
+                total += len(chunk)
+                if total > MAX_UPLOAD_BYTES:
+                    raise HTTPException(413, "uploads are limited to 500 MiB each")
+                output.write(chunk)
+    except BaseException:
+        destination.unlink(missing_ok=True)
+        raise
     if total == 0:
         destination.unlink(missing_ok=True)
         raise HTTPException(400, "uploaded file is empty")
     return destination
+
+
+def _safe_source_filename(source_filename: str | None, fallback: str) -> str:
+    """Return a bounded UTF-8 basename suitable for untrusted V2 metadata."""
+    raw_name = (source_filename or fallback).replace("\\", "/")
+    basename = raw_name.rsplit("/", 1)[-1].strip()
+    basename = "".join(
+        "_" if ord(character) < 32 or ord(character) == 127 else character
+        for character in basename
+    )
+    if not basename or basename in (".", ".."):
+        basename = Path(fallback).name or "stream.bin"
+    basename = (
+        basename.encode("utf-8")[:MAX_SOURCE_FILENAME_BYTES]
+        .decode("utf-8", "ignore")
+        .strip()
+    )
+    return basename if basename and basename not in (".", "..") else "stream.bin"
+
+
+def _safe_claimed_media_type(content_type: str | None) -> str | None:
+    """Accept only a bounded RFC-token type/subtype and discard parameters."""
+    if not content_type:
+        return None
+    claimed = content_type.split(";", 1)[0].strip().lower()
+    if len(claimed) > 128 or claimed.count("/") != 1:
+        return None
+    media_type, subtype = claimed.split("/", 1)
+    if not media_type or not subtype:
+        return None
+    if any(character not in _MEDIA_TYPE_TOKEN_CHARS for character in media_type + subtype):
+        return None
+    return claimed
 
 
 def resolve_format_metadata(
@@ -70,12 +112,7 @@ def resolve_format_metadata(
     content_type: str | None = None,
 ) -> tuple[int, str, str, str]:
     """Inspect file bytes and name to resolve (format_id, basename, media_type, file_extension)."""
-    raw_name = Path(source_filename or path.name).name.strip()
-    basename = raw_name if raw_name else path.name
-    # Ensure basename has no path separators, null bytes, and is valid UTF-8
-    basename = basename.replace("/", "_").replace("\\", "_").replace("\x00", "")
-    if not basename or basename in (".", ".."):
-        basename = path.name
+    basename = _safe_source_filename(source_filename, path.name)
 
     suffix = Path(basename).suffix.lstrip(".").lower()
 
@@ -106,8 +143,8 @@ def resolve_format_metadata(
     else:
         format_id = 0x0000
         ext = suffix if suffix else "bin"
-        if content_type and ("/" in content_type) and len(content_type) <= 128:
-            claimed_media = content_type.split(";")[0].strip().lower()
+        claimed_media = _safe_claimed_media_type(content_type)
+        if claimed_media:
             # If the payload is unverified arbitrary content, do not let an untrusted
             # caller claim that non-WAV / non-MP3 data is audio/wav or audio/mpeg.
             if claimed_media in ("audio/wav", "audio/x-wav", "audio/vnd.wave", "audio/mpeg", "audio/mp3"):

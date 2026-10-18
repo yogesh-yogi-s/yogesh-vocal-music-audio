@@ -30,7 +30,7 @@ app = [
     "python-multipart>=0.0.12,<1.0",
 ]
 dev = [
-    "pytest>=8.0,<10.0",
+    "pytest>=9.1.1,<10.0",
     "httpx>=0.27,<1.0",
 ]
 

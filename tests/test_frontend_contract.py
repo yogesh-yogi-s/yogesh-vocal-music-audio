@@ -10,10 +10,214 @@ def test_homepage_exposes_complete_vma_user_journey():
     for identifier in (
         "create-form", "vocal-input", "music-input", "open-form", "vma-input", "vma-details",
         "play", "pause", "stop", "seek", "master-volume", "vocal-volume", "music-volume",
-        "vocal-mute", "music-mute", "extract-vocal", "extract-music", "extract-all", "how-heading",
-        "v2-playback-notice",
+        "vocal-mute", "music-mute", "extract-vocal", "extract-music", "extract-all",
+        "v2-playback-notice", "theme-toggle", "nav-toggle", "site-nav", "quick-demo",
+        "inspect-empty", "playback-empty", "extract-empty", "waveform-vocal", "waveform-music",
+        "create-result", "create-result-filename", "download-vma", "delete-session",
     ):
         assert f'id="{identifier}"' in html
+
+
+def test_redesigned_workspace_has_real_routes_theme_and_project_links():
+    html = (ROOT / "frontend" / "index.html").read_text("utf-8")
+    script = (ROOT / "frontend" / "js" / "app.js").read_text("utf-8")
+    stylesheet = (ROOT / "frontend" / "css" / "style.css").read_text("utf-8")
+
+    for route in ("home", "create", "open", "inspect", "playback", "extract", "format", "help"):
+        assert f'href="#/{route}"' in html
+        assert f'data-view="{route}"' in html
+        assert f"'{route}':" not in script  # route keys are unquoted identifiers
+    assert html.count("<details") >= 5
+    assert "https://github.com/yogesh-yogi-s/yogesh-vocal-music-audio" in html
+    assert "Star on GitHub" in html
+    assert "localStorage.getItem('vma-theme')" in html
+    assert "prefers-color-scheme: light" in html
+    assert "window.localStorage.setItem('vma-theme', theme)" in script
+    assert "document.documentElement" in script
+    assert "aria-pressed" in script
+    assert ':root[data-theme="light"]' in stylesheet
+    assert "prefers-reduced-motion: reduce" in stylesheet
+    assert "@media(max-width:980px)" in stylesheet
+    assert "--orange:#ff7a1a" in stylesheet
+    assert "--teal:#48b9ae" in stylesheet
+    assert "#/playback" in html
+    assert "initializeRouter" in script
+    assert "navigateView('playback')" in script
+    assert "linear-gradient" in stylesheet  # restrained player edge treatment only
+    assert "purple" not in stylesheet.lower()
+
+
+def test_owned_session_deletion_waits_for_success_before_clearing_the_frontend():
+    script = (ROOT / "frontend" / "js" / "app.js").read_text("utf-8")
+    handler = script.split("async function deleteCurrentSession()", 1)[1].split(
+        "$('delete-session').addEventListener", 1
+    )[0]
+
+    assert "fetch(`/api/vma/${session}`, { method: 'DELETE' })" in handler
+    assert "if (!response.ok) throw new Error" in handler
+    assert handler.index("if (!response.ok)") < handler.index("beginVmaTransition()")
+    assert "if (state.session !== session) return" in handler
+    assert "navigateView('home')" in handler
+
+
+def test_theme_and_mobile_navigation_toggle_without_touching_player_state():
+    script_path = ROOT / "frontend" / "js" / "app.js"
+    runner = r'''
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const source = fs.readFileSync(process.argv[1], 'utf8') + '\nglobalThis.__uiTest = { state };';
+
+function element() {
+  const classes = new Set(); const listeners = {}; const attributes = {};
+  const children = { '.theme-label': { textContent: '' }, '.theme-icon': { textContent: '' } };
+  const submit = { disabled: false, textContent: '', dataset: { label: '' } };
+  return {
+    textContent: '', innerHTML: '', disabled: false, value: '1', max: '0', href: '', dataset: {}, files: [],
+    classList: {
+      add(name) { classes.add(name); }, remove(name) { classes.delete(name); },
+      toggle(name, force) { const present = force === undefined ? !classes.has(name) : force; if (present) classes.add(name); else classes.delete(name); return present; },
+      contains(name) { return classes.has(name); },
+    },
+    addEventListener(name, callback) { listeners[name] = callback; },
+    setAttribute(name, value) { attributes[name] = String(value); },
+    getAttribute(name) { return attributes[name]; },
+    querySelector(selector) { return children[selector] || submit; },
+    click() { if (listeners.click) listeners.click({ currentTarget: this }); },
+  };
+}
+
+const nodes = new Map(); const navLinks = [element(), element()];
+const root = { dataset: { theme: 'dark' } };
+const document = {
+  documentElement: root,
+  getElementById(id) { if (!nodes.has(id)) nodes.set(id, element()); return nodes.get(id); },
+  querySelectorAll(selector) { return selector === '#site-nav a' ? navLinks : []; },
+  createElement() { return { _text: '', set textContent(value) { this._text = String(value); }, get innerHTML() { return this._text; } }; },
+};
+const saved = {};
+globalThis.document = document;
+globalThis.window = { setTimeout() {}, localStorage: { setItem(key, value) { saved[key] = value; } } };
+globalThis.URL = { createObjectURL() {}, revokeObjectURL() {} };
+globalThis.setInterval = () => 1; globalThis.clearInterval = () => {};
+globalThis.AudioContext = class {};
+
+eval(source);
+const theme = document.getElementById('theme-toggle');
+const navToggle = document.getElementById('nav-toggle');
+const siteNav = document.getElementById('site-nav');
+globalThis.__uiTest.state.session = 'personal-session';
+globalThis.__uiTest.state.playing = true;
+
+theme.click();
+assert.equal(root.dataset.theme, 'light');
+assert.equal(theme.getAttribute('aria-pressed'), 'true');
+assert.equal(theme.getAttribute('aria-label'), 'Switch to dark theme');
+assert.equal(saved['vma-theme'], 'light');
+assert.equal(globalThis.__uiTest.state.session, 'personal-session');
+assert.equal(globalThis.__uiTest.state.playing, true);
+
+theme.click();
+assert.equal(root.dataset.theme, 'dark');
+assert.equal(theme.getAttribute('aria-pressed'), 'false');
+assert.equal(saved['vma-theme'], 'dark');
+
+navToggle.click();
+assert.equal(siteNav.dataset.open, 'true');
+assert.equal(navToggle.getAttribute('aria-expanded'), 'true');
+navLinks[0].click();
+assert.equal(siteNav.dataset.open, 'false');
+assert.equal(navToggle.getAttribute('aria-expanded'), 'false');
+'''
+    result = subprocess.run(
+        ["node", "-e", runner, str(script_path)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_hash_routing_switches_dedicated_views_without_resetting_session():
+    script_path = ROOT / "frontend" / "js" / "app.js"
+    runner = r'''
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const source = fs.readFileSync(process.argv[1], 'utf8') + '\nglobalThis.__routeTest = { state, showView };';
+function element(dataset = {}) {
+  const classes = new Set(); const attributes = {};
+  return {
+    dataset, textContent: '', innerHTML: '', value: '1', max: '0', files: [], disabled: false,
+    classList: { add(v){classes.add(v)}, remove(v){classes.delete(v)}, contains(v){return classes.has(v)},
+      toggle(v, force){const on=force===undefined?!classes.has(v):force; if(on)classes.add(v);else classes.delete(v);return on} },
+    addEventListener(){}, setAttribute(k,v){attributes[k]=String(v)}, removeAttribute(k){delete attributes[k]},
+    getAttribute(k){return attributes[k]}, querySelector(){return {dataset:{label:''}}}, focus(){}
+  };
+}
+const views = ['home','create','open','inspect','playback','extract','format','help'].map(route => element({view:route}));
+const links = ['home','create','open','inspect','playback','extract','format','help'].map(route => element({route}));
+const nodes = new Map(); const root = {dataset:{theme:'dark'}};
+const document = {
+  documentElement: root,
+  getElementById(id){if(!nodes.has(id))nodes.set(id,element());return nodes.get(id)},
+  querySelectorAll(selector){if(selector==='[data-view]')return views;if(selector==='[data-route]')return links;return []},
+  createElement(){return {_text:'',set textContent(v){this._text=String(v)},get innerHTML(){return this._text}}}
+};
+const windowListeners = {};
+globalThis.document=document;
+globalThis.window={location:{hash:'#/home'},localStorage:{setItem(){}},setTimeout(){},addEventListener(name,fn){windowListeners[name]=fn}};
+globalThis.URL={createObjectURL(){},revokeObjectURL(){}};
+globalThis.setInterval=()=>1;globalThis.clearInterval=()=>{};globalThis.AudioContext=class{};
+eval(source);
+globalThis.__routeTest.state.session='kept-session';globalThis.__routeTest.state.playing=true;
+window.location.hash='#/playback';windowListeners.hashchange();
+assert.equal(views.find(v=>v.dataset.view==='playback').classList.contains('hidden'),false);
+assert.equal(views.find(v=>v.dataset.view==='home').classList.contains('hidden'),true);
+assert.equal(links.find(v=>v.dataset.route==='playback').getAttribute('aria-current'),'page');
+assert.equal(globalThis.__routeTest.state.session,'kept-session');
+assert.equal(globalThis.__routeTest.state.playing,true);
+'''
+    result = subprocess.run(["node", "-e", runner, str(script_path)], cwd=ROOT, capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+
+
+def test_live_waveforms_use_independent_web_audio_analysers_without_duplicate_signal_paths():
+    script = (ROOT / "frontend" / "js" / "app.js").read_text("utf-8")
+    assert "state.context.createAnalyser()" in script
+    assert "analyser.connect(gain)" in script
+    assert "source.connect(state.analysers[kind] || state.gains[kind])" in script
+    assert "getByteTimeDomainData(values)" in script
+    assert "drawLiveWaveform('vocal')" in script
+    assert "drawLiveWaveform('music')" in script
+    assert "state.sources[kind] && !state.muted[kind]" in script
+    assert "+$('master-volume').value > 0" in script
+    assert "window.requestAnimationFrame(frame)" in script
+    assert "window.cancelAnimationFrame" in script
+    assert "reducedMotionPreferred()" in script
+    assert "stopVisualization(true)" in script
+
+
+def test_create_success_stays_on_create_and_exposes_explicit_next_steps():
+    html = (ROOT / "frontend" / "index.html").read_text("utf-8")
+    script = (ROOT / "frontend" / "js" / "app.js").read_text("utf-8")
+    create_handler = script.split("async function handleCreateSubmit(", 1)[1].split(
+        "$('create-form').addEventListener", 1
+    )[0]
+    open_handler = script.split("async function handleOpenSubmit(", 1)[1].split(
+        "$('open-form').addEventListener", 1
+    )[0]
+    demo_handler = script.split("async function handleDemoOpen(", 1)[1].split(
+        "$('try-demo').addEventListener", 1
+    )[0]
+
+    assert 'id="create-result"' in html
+    assert 'id="create-result-filename"' in html
+    assert 'href="#/inspect" data-route="inspect"' in html
+    assert 'href="#/playback" data-route="playback"' in html
+    assert "clearCreateResult()" in create_handler
+    assert "$('create-result').classList.remove('hidden')" in create_handler
+    assert "navigateView(" not in create_handler
+    assert "navigateView('inspect')" in open_handler
+    assert "navigateView('playback')" in demo_handler
 
 
 def test_frontend_exposes_native_v2_playback_with_download_fallback():
@@ -24,7 +228,8 @@ def test_frontend_exposes_native_v2_playback_with_download_fallback():
     script = (ROOT / "frontend" / "js" / "app.js").read_text("utf-8")
     assert "v2StreamCard" in script
     assert "extract-stream" in script
-    assert "classList.toggle('hidden', isV2)" in script
+    assert "v2ExtractCard" in script
+    assert "$('v2-extract-list').classList.toggle('hidden', !isV2)" in script
     assert "v2-playback-notice" in script
     assert "decodeAudioData" in script
     assert "Not playable in this browser; original download remains available." in script

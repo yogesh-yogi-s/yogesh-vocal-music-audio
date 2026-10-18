@@ -49,22 +49,32 @@ Requirements: Python 3.12+ (tested with Python 3.13).
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
-python -m uvicorn backend.app.main:app --reload
+python -m pip install -r requirements.lock
+$env:VMA_ENVIRONMENT = 'development'
+python -m uvicorn backend.app.main:app --reload --no-proxy-headers
 ```
 
 On Linux or macOS, use `python -m venv .venv && . .venv/bin/activate` in place of the PowerShell activation step.
 
-Open [http://127.0.0.1:8000](http://127.0.0.1:8000) in a browser. Uploads are limited to 500 MB per file and are held in temporary application storage.
+Open [http://127.0.0.1:8000](http://127.0.0.1:8000) in a browser. The server enforces a 500 MiB limit for each uploaded file and removes partial application copies when validation or storage fails. Upload filenames, media types, and contents are treated as untrusted; application storage uses generated names, while bounded sanitized basenames are retained only as V2 metadata. Uploads are held in temporary application storage.
 
 To run the same application in a container:
 
 ```powershell
 docker build -t vma .
-docker run --rm -p 8000:8000 vma
+docker run --rm -p 8000:8000 -e VMA_ENVIRONMENT=development vma
 ```
 
 ## Browser Workflow
+
+### Welcome demo
+
+Choose **Try demo** to open the bundled VMA V1 sample without uploading a file.
+The sample contains two short, mathematically generated PCM tones and uses the
+same session inspection, playback, seeking, controls, and extraction routes as a
+user-opened VMA. Every request receives a separate temporary demo session; the
+bundled source asset is never modified. The Create and Open workflows remain
+available for personal files.
 
 ### Create
 
@@ -118,7 +128,8 @@ FastAPI provides interactive documentation at [http://127.0.0.1:8000/docs](http:
 
 | Method | Endpoint | Purpose |
 |---|---|---|
-| GET | `/api/health` | Returns the local service health status. |
+| GET | `/api/health` | Process liveness; does not test storage readiness. |
+| GET | `/api/ready` | Readiness check for initialized, accessible application storage. |
 | POST | `/api/vma/create` | Packages multipart `vocal` and `music` uploads into `song.vma`. With no `version`, valid PCM WAV pairs use V1 and other accepted inputs use V2; `version=1` is strict PCM WAV and `version=2` stores opaque source bytes. Optional `title` and `artist` fields are accepted; `vocal_start_sample` and `music_start_sample` are accepted and apply to V1 creation only. |
 | POST | `/api/vma/validate` | Validates a multipart VMA `file` and returns validation/stream metadata. |
 | POST | `/api/vma/info` | Returns metadata and stream properties for a multipart VMA `file`. |
@@ -126,7 +137,60 @@ FastAPI provides interactive documentation at [http://127.0.0.1:8000/docs](http:
 | POST | `/api/vma/extract/music` | V1-only: returns the stored Music / Instrumental stream from a multipart VMA `file` as WAV. |
 | POST | `/api/vma/extract/all` | V1-only: returns both stored streams from a multipart VMA `file` as a ZIP archive. |
 
-The browser workflow uses session-scoped routes internally: `POST /api/create`, `POST /api/open`, `GET /api/vma/{session_id}`, `GET /api/vma/{session_id}/stream/{kind}`, `GET /api/vma/{session_id}/extract/{kind}`, `GET /api/vma/{session_id}/extract-all`, and `GET /api/vma/{session_id}/extract-stream/{stream_id}`. `POST /api/create` automatically selects V1 for two valid PCM WAV uploads and V2 for other accepted inputs. A pair whose filenames are both `.wav` but whose bytes are not valid RIFF/WAVE is rejected with HTTP 422. The V1-only stream and bulk-extraction routes reject V2, while the V2 per-stream route remains available regardless of playback support.
+The browser workflow uses session-scoped routes internally: `POST /api/demo`, `POST /api/create`, `POST /api/open`, `GET /api/vma/{session_id}`, `GET /api/vma/{session_id}/stream/{kind}`, `GET /api/vma/{session_id}/extract/{kind}`, `GET /api/vma/{session_id}/extract-all`, `GET /api/vma/{session_id}/extract-stream/{stream_id}`, and `DELETE /api/vma/{session_id}`. `POST /api/demo` accepts no upload or path and opens the fixed bundled sample in a fresh temporary session. `POST /api/create` automatically selects V1 for two valid PCM WAV uploads and V2 for other accepted inputs. A pair whose filenames are both `.wav` but whose bytes are not valid RIFF/WAVE is rejected with HTTP 422. The V1-only stream and bulk-extraction routes reject V2, while the V2 per-stream route remains available regardless of playback support.
+
+### Anonymous browser session security
+
+Browser sessions remain account-free. On the first successful Create, Open, or Try Demo request, the server creates a cryptographically random browser ownership credential in an `HttpOnly`, `SameSite=Strict`, `/api` cookie. Only a SHA-256 digest is stored beside each temporary session. The UUID in a session URL is an identifier, not authorization: every inspect, playback, extraction, download, and deletion request must also prove ownership. Missing, invalid, expired, deleted, and foreign sessions all return the same generic not-found response.
+
+The browser credential can own multiple independent personal and demo sessions, so opening a new tab or creating a second VMA does not invalidate earlier sessions. A page refresh retains access while the browser session cookie and server-side temporary data still exist. Sessions expire after two hours of inactivity; **Delete session** revokes one selected session without deleting the browser's other sessions. Demo sessions use the same ownership checks but remain separate copies, never a shared writable session.
+
+State-changing browser routes validate the request origin (and Fetch Metadata when supplied) to defend the cookie against CSRF. Production mode requires an explicit HTTPS origin on these requests. The ownership cookie is always `Secure` in production and is non-Secure only for genuine loopback HTTP development. The application does not enable CORS or cross-origin credential sharing. Passing tests does not by itself make the development server production-ready.
+
+### Resource and abuse limits
+
+The 500 MiB per-file product limit is unchanged. Before multipart parsing, the application rejects a declared or streamed request body above 1,002 MiB for two-source Create requests and 502 MiB for single-file Open, Validate, Info, and stateless Extract requests. The additional 2 MiB is a multipart-envelope allowance for boundaries, safe filenames, and form fields; it is not additional audio capacity. Try Demo accepts at most a 64 KiB request body. Oversized bodies receive a consistent HTTP 413 response, while the streamed 500 MiB per-file check remains as defense in depth.
+
+Default single-process controls are:
+
+- 3 concurrent expensive requests process-wide and 2 active operations per session.
+- 8 GiB of application-owned temporary-storage admission capacity.
+- 128 live sessions process-wide and 16 live sessions per anonymous browser credential. New sessions are rejected at the boundary; existing sessions are never evicted to make room.
+- A 60-second client rate window: Demo 12, Create 10, Open 20, Inspect 120, Extract/Stream 60, and Validate/Info 30 requests. Limits return HTTP 429 with `Retry-After`. The connection peer is used unless it belongs to an explicitly configured trusted proxy network; untrusted forwarding headers are stripped.
+
+Operators can set `VMA_MULTIPART_OVERHEAD_BYTES`, `VMA_DEMO_REQUEST_BYTES`, `VMA_MAX_PROCESS_TEMP_BYTES`, `VMA_MAX_ACTIVE_EXPENSIVE_REQUESTS`, `VMA_MAX_ACTIVE_SESSION_OPERATIONS`, `VMA_MAX_PROCESS_SESSIONS`, `VMA_MAX_BROWSER_SESSIONS`, `VMA_RATE_WINDOW_SECONDS`, and the category variables `VMA_RATE_<CATEGORY>_PER_WINDOW`. Values are positive integer byte/count values and are read at process startup. These controls are deliberately process-local. Multiple workers need a shared limiter, shared session/storage accounting, and distributed deletion/expiry coordination.
+
+The container image runs as an unprivileged `vma` user and uses `/tmp/vma`. A runtime may additionally mount it as a bounded tmpfs, for example `--tmpfs /tmp/vma:rw,noexec,nosuid,size=8g`. An ingress should still enforce corresponding request-body and connection/rate limits before traffic reaches Python's multipart parser.
+
+### Production deployment configuration
+
+The supported production model is **one VMA application process behind one HTTPS-terminating reverse proxy**. The proxy must overwrite (not append untrusted values to) `X-Forwarded-Proto`, `X-Forwarded-Host`, and `X-Forwarded-For`. Uvicorn must run with `--no-proxy-headers`; VMA performs its own forwarding-header validation. Do not expose the application port directly when it is configured to trust a proxy network.
+
+Set these values before starting the process:
+
+| Setting | Production requirement |
+|---|---|
+| `VMA_ENVIRONMENT` | Set to `production`; this enables fail-closed origin rules, HSTS, and unconditional Secure ownership cookies. |
+| `VMA_TRUSTED_HOSTS` | Required comma-separated public hostnames, for example `audio.example.com`. A bare `*` is rejected. A leading wildcard such as `*.example.com` is supported only when intentionally configured. |
+| `VMA_ALLOWED_ORIGINS` | Required comma-separated exact HTTPS origins, for example `https://audio.example.com`. Paths, credentials, query strings, fragments, and HTTP origins are rejected. |
+| `VMA_HEALTHCHECK_HOST` | Required exact hostname used by the container readiness probe. It must match `VMA_TRUSTED_HOSTS`; use a concrete hostname such as `audio.example.com` even when trusted hosts also contain a wildcard. |
+| `VMA_TRUSTED_PROXIES` | Optional comma-separated IP addresses or CIDR networks for actual proxy peers. Leave empty for direct TLS. Never use a broad network merely to make forwarding work. |
+| `VMA_TEMP_ROOT` | Existing, writable directory dedicated to VMA temporary state. The container fixes this to `/tmp/vma`. |
+
+The application rejects untrusted hosts before routing, ignores forwarding metadata from untrusted peers, and emits CSP, `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, a restrictive Permissions Policy, and a response/request-correlation ID. HSTS is emitted in production. The current CSP must retain `script-src 'unsafe-inline'` because the HTML contains a small inline pre-paint theme initializer; removing that exception requires moving or hashing that initializer and browser-regression testing it.
+
+`VMA_ENVIRONMENT` has no implicit default: direct Uvicorn launches fail clearly unless the operator explicitly selects `development`, `test`, or `production`. The container selects `production` by default and therefore also refuses to start until trusted hosts, HTTPS origins, and an exact trusted health-check hostname are supplied. Production returns 404 for `/docs` and `/redoc`; local development retains both interactive documentation pages. `/openapi.json` remains available for programmatic schema clients.
+
+Production checklist:
+
+- Terminate TLS at the trusted proxy (or configure direct TLS), redirect HTTP to HTTPS, and set the values above. Verify an ownership cookie has `Secure`, `HttpOnly`, `SameSite=Strict`, and `Path=/api`.
+- Configure the proxy to replace forwarding headers, enforce accepted hosts, and apply the same request-body ceilings as VMA: 1,002 MiB for two-file Create requests, 502 MiB for single-upload requests, and 64 KiB for Demo.
+- Apply proxy-level header/body read timeouts, connection limits, and slow-client defenses. The application deliberately has no arbitrary processing timeout because valid large-file operations can be long-running. The container sets Uvicorn's idle keep-alive timeout to five seconds; that is not a request-duration defense.
+- Run exactly one application worker/replica. Ownership keys, sessions, rate windows, active leases, quota accounting, and temporary files are process-local. Multiple workers require a shared-state/storage design and distributed coordination, not merely sticky routing.
+- Mount `/tmp/vma` (or `VMA_TEMP_ROOT` plus the operating-system temp location) on bounded storage sized for the configured 8 GiB admission budget and multipart spool overhead. Starlette's multipart parser may spool outside the application session tree using the operating-system temp directory.
+- Monitor free space/inodes, 413/429/507/5xx rates, readiness, process restarts, and cleanup failures. `/api/health` is liveness; `/api/ready` verifies initialized storage directories, disk accessibility, and a small temporary write. The container probe sends the first configured trusted hostname.
+- Expect all sessions to disappear on process/container restart. Inactive sessions expire after two hours and periodic cleanup is best-effort; Delete session revokes access immediately, while physical removal waits for active responses to finish.
+- Keep logs access-controlled. Request logs contain a correlation ID, method, coarse route category, status, and duration; they intentionally omit cookies, ownership tokens, uploaded bytes, and full session URLs.
 
 Example: create a VMA through the programmatic API.
 
@@ -139,11 +203,28 @@ curl.exe -X POST http://127.0.0.1:8000/api/vma/create -F "vocal=@vocal.wav" -F "
 Install the development dependencies, then run the complete automated suite:
 
 ```powershell
-python -m pip install -r requirements-dev.txt
+python -m pip install -r requirements-dev.lock
 python -m pytest -q
 ```
 
-Current verified state with a configured full local FFmpeg: **307 tests passing, 0 failed, 0 skipped, 0 errors**.
+`requirements.txt` and `requirements-dev.txt` declare the reviewed direct
+dependency ranges. Reproducible installs use `requirements.lock` and
+`requirements-dev.lock`; both pin the complete Python 3.13 dependency graph,
+require wheels, and enforce SHA-256 hashes. The Docker image installs only the
+runtime lock.
+
+To update the locks, resolve the direct declarations for both Windows x86-64
+and the Docker target (CPython 3.13, Linux x86-64/manylinux2014), review release
+notes and published advisories, and capture the selected wheel hashes from
+pip's JSON `--report` output. Include both platform hashes for binary packages,
+retain the platform markers for `colorama` and `uvloop`, then verify clean
+installs with `python -m pip install -r requirements-dev.lock` and the Linux
+runtime lock before accepting the update. Never remove `--require-hashes` or
+silently refresh the lock during an image build.
+
+The Phase 4D hash-locked Python 3.13 verification completed with **448 tests
+passing, 0 failed, 4 skipped, and 1 deprecation warning**. The four skips are
+the opt-in real-codec cases described below; they were not counted as passes.
 
 The suite covers:
 

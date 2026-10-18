@@ -1,72 +1,129 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>VMA — Vocal Music Audio</title>
-  <link rel="stylesheet" href="/css/style.css">
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Create, inspect, play, validate, and extract Vocal Music Audio containers.">
+  <title>VMA — Audio workspace</title>
+  <script>(()=>{try{const s=localStorage.getItem('vma-theme');const p=matchMedia('(prefers-color-scheme: light)').matches?'light':'dark';document.documentElement.dataset.theme=s==='light'||s==='dark'?s:p}catch{document.documentElement.dataset.theme='dark'}})();</script>
+  <link rel="stylesheet" href="/css/style.css?v=0.5.0">
 </head>
 <body>
-  <main class="shell">
-    <header class="app-header">
-      <div class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></div>
-      <div><p class="eyebrow">VMA v0.3</p><h1>Vocal Music Audio</h1><p class="lede">A lossless container for synchronized vocal and instrumental streams.</p></div>
+<a class="skip-link" href="#view-content">Skip to workspace</a>
+<div class="app-shell">
+  <aside id="site-nav" class="sidebar" aria-label="VMA workspace navigation" data-open="false">
+    <a class="brand" href="#/home" data-route="home"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span><span><strong>VMA</strong><small>Vocal Music Audio</small></span></a>
+    <nav class="primary-nav" aria-label="Main navigation">
+      <p class="nav-label">Workspace</p>
+      <a href="#/home" data-route="home"><span>⌂</span>Home</a>
+      <a href="#/create" data-route="create"><span>＋</span>Create VMA</a>
+      <a href="#/open" data-route="open"><span>↗</span>Open VMA</a>
+      <a href="#/inspect" data-route="inspect"><span>⌕</span>Inspect &amp; Validate</a>
+      <a href="#/playback" data-route="playback"><span>▶</span>Playback</a>
+      <a href="#/extract" data-route="extract"><span>⇩</span>Extract</a>
+      <p class="nav-label secondary">Learn</p>
+      <a href="#/format" data-route="format"><span>◇</span>Format Guide</a>
+      <a href="#/help" data-route="help"><span>?</span>Help / FAQ</a>
+    </nav>
+    <div class="sidebar-footer">
+      <a class="github-link" href="https://github.com/yogesh-yogi-s/yogesh-vocal-music-audio" target="_blank" rel="noreferrer" aria-label="Star VMA on GitHub"><span>☆</span>Star on GitHub</a>
+      <button id="theme-toggle" class="theme-toggle" type="button"><span class="theme-icon">◐</span><span class="theme-label">Theme</span></button>
+    </div>
+  </aside>
+  <div class="app-main">
+    <header class="topbar">
+      <button id="nav-toggle" class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav"><span>☰</span><span class="sr-only">Open navigation</span></button>
+      <div class="topbar-copy"><p id="view-kicker">VMA workspace</p><h1 id="view-title">Home</h1></div>
+      <div id="session-chip" class="session-chip" data-state="empty"><i></i><span id="session-chip-text">No VMA loaded</span></div>
     </header>
-
-    <section class="workspace-grid" aria-label="VMA workspace">
-      <section class="card create-card" aria-labelledby="create-heading">
-        <div class="section-heading"><div><p class="section-kicker">New container</p><h2 id="create-heading">Create VMA</h2></div><p>Package original vocal and music streams (any file format or binary payload) into a synchronized VMA file.</p></div>
-        <form id="create-form" novalidate>
-          <div class="files">
-            <label class="file-field">Vocal stream<input id="vocal-input" name="vocal" type="file" required aria-describedby="source-info"><span>Choose a vocal stream or file</span></label>
-            <label class="file-field">Music / Instrumental stream<input id="music-input" name="music" type="file" required aria-describedby="source-info"><span>Choose a music or payload file</span></label>
+    <div id="session-strip" class="session-strip hidden" aria-label="Active VMA session">
+      <div><span id="session-badge">Personal VMA</span><strong id="session-title">Untitled</strong><small id="session-summary"></small></div>
+      <nav><a href="#/inspect" data-route="inspect">Inspect</a><a href="#/playback" data-route="playback">Playback</a><a href="#/extract" data-route="extract">Extract</a><button id="delete-session" type="button">Delete session</button></nav>
+      <span id="session-status" class="sr-only" aria-live="polite"></span>
+    </div>
+    <main id="view-content" class="view-content" tabindex="-1">
+      <section class="app-view" data-view="home" aria-labelledby="home-heading">
+        <div class="home-hero">
+          <div class="home-copy"><p class="eyebrow"><i></i>Two-stem audio, one structured container</p><h2 id="home-heading">Your audio stems.<br><em>One focused workspace.</em></h2><p>Bring Vocal and Music / Instrumental streams together. Create, open, inspect, play in sync, validate, and extract without pretending VMA is a codec or separator.</p>
+            <div class="hero-actions"><button id="try-demo" class="button primary large" type="button">Try demo <span>▶</span></button><a class="button secondary large" href="#/create" data-route="create" data-action="use-own-files">Create VMA</a><a class="button quiet large" href="#/open" data-route="open" data-action="use-own-files">Open VMA</a></div>
+            <p id="demo-status" class="status" aria-live="polite"></p>
           </div>
-          <div class="fields">
-            <label>Song title <span class="optional">Optional</span><input name="title" maxlength="200" placeholder="e.g. Session mix"></label>
-            <label>Artist <span class="optional">Optional</span><input name="artist" maxlength="200" placeholder="e.g. Artist name"></label>
-          </div>
-          <div id="source-info" class="source-info">Choose two files (any audio format, unknown format, or binary payload). Valid PCM WAV pairs create a playable V1 container; other formats create a byte-exact V2 container with direct extraction (playback is format-dependent).</div>
-          <div class="form-footer"><button class="button button-primary" type="submit">Create VMA</button><p class="form-note">Streams are stored separately and byte-exact without transcoding.</p></div>
-        </form>
-        <p id="create-status" class="status" aria-live="polite"></p>
-        <a id="download-vma" class="download button button-secondary hidden" download="song.vma">Download song.vma</a>
-      </section>
-
-      <section class="card open-card" aria-labelledby="open-heading">
-        <div class="section-heading"><div><p class="section-kicker">Existing container</p><h2 id="open-heading">Open VMA</h2></div><p>Inspect, play, and recover the streams stored in an existing VMA file.</p></div>
-        <form id="open-form" class="open-form" novalidate>
-          <label class="file-field">VMA file<input id="vma-input" name="file" type="file" accept=".vma,application/vnd.vma" required><span>Choose a .vma file</span></label>
-          <button class="button button-secondary" type="submit">Open VMA</button>
-        </form>
-        <p id="open-status" class="status" aria-live="polite"></p>
-      </section>
-    </section>
-
-    <section id="vma-details" class="current-vma hidden" aria-live="polite">
-      <div class="section-intro"><div><p class="section-kicker">Current container</p><h2>VMA information</h2></div><p>Metadata and stream properties are read directly from the opened container.</p></div>
-      <div class="metadata-panel"><dl id="metadata-list" class="details"></dl></div>
-      <div id="stream-list" class="streams" aria-label="VMA stream metadata"></div>
-      <p id="v2-playback-notice" class="source-info hidden" role="status">VMA v2 preserves original stream bytes. Browser-native playback is checked for each stream; downloads remain byte-exact.</p>
-
-      <section id="player-panel" class="player card" aria-labelledby="player-heading">
-        <div class="player-heading"><div><p class="section-kicker">Synchronized playback</p><h2 id="player-heading">Player</h2></div><output id="time" class="time-readout">0:00 / 0:00</output></div>
-        <div class="transport"><div class="transport-buttons"><button id="play" class="button button-primary" type="button">Play</button><button id="pause" class="button button-secondary" type="button">Pause</button><button id="stop" class="button button-quiet" type="button">Stop</button></div><label class="timeline-label">Playback position<input id="seek" type="range" min="0" max="0" value="0" step="0.01" aria-label="Seek playback position"></label></div>
-        <div class="master-control"><label>Master volume<input id="master-volume" type="range" min="0" max="1" value="1" step="0.01" aria-label="Master volume"></label></div>
-        <div class="stream-controls" aria-label="Individual stream controls">
-          <section class="stream-control vocal-control" aria-labelledby="vocal-control-heading"><div class="stream-control-heading"><div><p class="control-label">Independent stream</p><h3 id="vocal-control-heading">Vocal</h3></div><button id="vocal-mute" class="button button-quiet" type="button">Mute vocal</button></div><label>Vocal volume<input id="vocal-volume" type="range" min="0" max="1" value="1" step="0.01" aria-label="Vocal volume"></label></section>
-          <section class="stream-control music-control" aria-labelledby="music-control-heading"><div class="stream-control-heading"><div><p class="control-label">Independent stream</p><h3 id="music-control-heading">Music / Instrumental</h3></div><button id="music-mute" class="button button-quiet" type="button">Mute music</button></div><label>Music volume<input id="music-volume" type="range" min="0" max="1" value="1" step="0.01" aria-label="Music volume"></label></section>
+          <div class="signal-card" aria-label="Synchronized stem preview"><div class="signal-head"><b>VMA</b><span>Synchronized container</span><i></i></div><div class="signal-track vocal"><span>VOCAL</span><div class="mini-wave"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div><div class="signal-track music"><span>MUSIC</span><div class="mini-wave"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div><div class="signal-transport"><b>▶</b><div><span></span></div><small>0:18 / 2:00</small></div></div>
+        </div>
+        <div class="action-grid">
+          <button id="quick-demo" class="action-card" type="button"><b class="action-icon orange">▶</b><span><strong>Hear the synthetic demo</strong><small>No upload required. Uses the real player.</small></span><em>→</em></button>
+          <a class="action-card" href="#/create" data-route="create" data-action="use-own-files"><b class="action-icon">＋</b><span><strong>Package your stems</strong><small>Create a V1 or V2 container.</small></span><em>→</em></a>
+          <a class="action-card" href="#/open" data-route="open" data-action="use-own-files"><b class="action-icon teal">↗</b><span><strong>Open an existing VMA</strong><small>Inspect, play, and extract safely.</small></span><em>→</em></a>
+        </div>
+        <div class="home-grid">
+          <article class="panel"><p class="panel-kicker">A compact workflow</p><h3>From source stems to a portable container</h3><ol class="workflow-list"><li><b>01</b><span><strong>Create or open</strong><small>Use separate sources or a valid .vma file.</small></span></li><li><b>02</b><span><strong>Inspect and listen</strong><small>Review real metadata and synchronized playback.</small></span></li><li><b>03</b><span><strong>Extract exactly</strong><small>Recover V1 WAVs or byte-exact V2 payloads.</small></span></li></ol></article>
+          <article class="panel format-preview"><p class="panel-kicker">Version aware</p><h3>One workspace, two contracts</h3><div><b>V1</b><p><strong>PCM workflow</strong><small>Canonical WAV reconstruction.</small></p></div><div><b class="teal">V2</b><p><strong>Original payloads</strong><small>Exact bytes; codec-dependent preview.</small></p></div><a class="text-link" href="#/format" data-route="format">Read the format guide →</a></article>
         </div>
       </section>
 
-      <section id="extract-panel" class="extraction card" aria-labelledby="extract-heading">
-        <div class="section-heading"><div><p class="section-kicker">Original streams</p><h2 id="extract-heading">Extract tracks</h2></div><p>Recover the original stored streams without AI vocal separation.</p></div>
-        <div class="actions"><a id="extract-vocal" class="download button button-secondary">Extract Vocal</a><a id="extract-music" class="download button button-secondary">Extract Music</a><a id="extract-all" class="download button button-primary">Extract Both</a></div>
-        <p id="extract-status" class="status" aria-live="polite"></p>
+      <section class="app-view hidden" data-view="create" aria-labelledby="create-heading">
+        <header class="view-header"><p class="eyebrow"><i></i>New container</p><h2 id="create-heading">Create VMA</h2><p>Package a Vocal and Music / Instrumental source while preserving their separate identities.</p></header>
+        <section class="workflow-card"><form id="create-form" novalidate>
+          <div class="upload-grid"><label class="drop-field"><b>＋</b><strong>Vocal stream</strong><small>Choose the vocal source file</small><input id="vocal-input" name="vocal" type="file" required aria-describedby="source-info"><em>Browse file</em></label><label class="drop-field music-drop"><b>＋</b><strong>Music / Instrumental</strong><small>Choose the music or payload file</small><input id="music-input" name="music" type="file" required aria-describedby="source-info"><em>Browse file</em></label></div>
+          <div class="field-grid"><label>Song title <span>Optional</span><input name="title" maxlength="200" placeholder="e.g. Session mix"></label><label>Artist <span>Optional</span><input name="artist" maxlength="200" placeholder="e.g. Artist name"></label></div>
+          <div id="source-info" class="info-box"><strong>Format-aware creation</strong><span>Valid PCM WAV pairs create V1. Other accepted non-empty inputs create byte-exact V2. Each upload is limited to 500 MB.</span></div>
+          <div class="form-actions"><button class="button primary" type="submit">Create VMA</button><span>No source separation or transcoding is performed.</span></div>
+        </form><p id="create-status" class="status" aria-live="polite"></p>
+          <section id="create-result" class="create-result hidden" aria-labelledby="create-result-heading">
+            <div class="create-result-icon" aria-hidden="true">✓</div>
+            <div><p class="panel-kicker">Container ready</p><h3 id="create-result-heading">Your VMA was created</h3><p><strong id="create-result-filename">song.vma</strong> is ready to download. The new session is also available in Inspect, Playback, and Extract.</p></div>
+            <div class="create-result-actions"><a id="download-vma" class="download button primary" download="song.vma">Download VMA</a><a class="button secondary" href="#/inspect" data-route="inspect">Inspect</a><a class="button quiet" href="#/playback" data-route="playback">Playback</a></div>
+          </section>
+        </section>
       </section>
-    </section>
 
-    <aside class="how-it-works" aria-labelledby="how-heading"><div class="how-number" aria-hidden="true">01</div><div><p class="section-kicker">Container concept</p><h2 id="how-heading">How VMA works</h2><p>Separate original Vocal and Music / Instrumental streams are stored inside one VMA container. Browser-native decoding can play supported source formats together; V2 containers always keep their original bytes available for direct extraction.</p></div></aside>
-  </main>
-  <script src="/js/app.js?v=0.3.1"></script>
+      <section class="app-view hidden" data-view="open" aria-labelledby="open-heading">
+        <header class="view-header"><p class="eyebrow"><i></i>Existing container</p><h2 id="open-heading">Open VMA</h2><p>Select a VMA file to validate its structure and start an isolated local session.</p></header>
+        <section class="workflow-card narrow"><form id="open-form" novalidate><label class="drop-field open-drop"><b>↗</b><strong>VMA container</strong><small>Select a supported .vma file, up to 500 MB</small><input id="vma-input" name="file" type="file" accept=".vma,application/vnd.vma" required><em>Browse VMA</em></label><button class="button primary block" type="submit">Open and validate</button></form><p id="open-status" class="status" aria-live="polite"></p></section>
+      </section>
+
+      <section class="app-view hidden" data-view="inspect" aria-labelledby="inspect-heading">
+        <header class="view-header"><p class="eyebrow"><i></i>Container intelligence</p><h2 id="inspect-heading">Inspect &amp; Validate</h2><p>Review metadata and structural results returned by the normal VMA inspection path.</p></header>
+        <div id="inspect-empty" class="empty-state"><b>⌕</b><h3>No VMA is active</h3><p>Open a container or load the synthetic demo.</p><div><a class="button primary" href="#/open" data-route="open">Open VMA</a><button class="button secondary" data-demo-trigger>Try demo</button></div></div>
+        <section id="vma-details" class="hidden">
+          <div id="demo-notice" class="demo-notice hidden" role="status"><b>◆</b><div><strong>Synthetic welcome demo</strong><p>Two generated tones in an application-controlled sample, isolated from personal sessions.</p></div><a href="#/create" data-route="create" data-action="use-own-files">Use your own files</a></div>
+          <div class="inspect-grid"><section class="panel"><div class="panel-heading"><div><p class="panel-kicker">Current container</p><h3>Identity &amp; timing</h3></div><span class="validation-badge">✓ Parsed successfully</span></div><dl id="metadata-list" class="details"></dl></section><section class="panel"><div class="panel-heading"><div><p class="panel-kicker">Stored content</p><h3>Streams</h3></div></div><div id="stream-list" class="streams"></div></section></div>
+          <p id="v2-playback-notice" class="info-box hidden" role="status"></p>
+        </section>
+      </section>
+
+      <section class="app-view hidden" data-view="playback" aria-labelledby="playback-view-heading">
+        <header class="view-header"><p class="eyebrow"><i></i>Synchronized audio</p><h2 id="playback-view-heading">Playback</h2><p>Preview Vocal and Music / Instrumental streams on one shared timeline.</p></header>
+        <div id="playback-empty" class="empty-state"><b>▶</b><h3>No playable VMA loaded</h3><p>Load the demo or a browser-decodable VMA.</p><div><button class="button primary" data-demo-trigger>Try demo</button><a class="button secondary" href="#/open" data-route="open">Open VMA</a></div></div>
+        <section id="player-panel" class="audio-console hidden" aria-labelledby="player-heading">
+          <div class="console-header"><div><p class="panel-kicker">Now loaded</p><h3 id="player-heading">Synchronized stem player</h3></div><span class="live-indicator"><i></i>Ready</span></div>
+          <div class="track-stack">
+            <section class="track-panel vocal-track"><div class="track-header"><div><b>01</b><p><strong id="vocal-control-heading">Vocal</strong><small>Primary stem</small></p></div><button id="vocal-mute" class="icon-button" type="button">Mute vocal</button></div><div class="waveform-wrap"><canvas id="waveform-vocal" width="900" height="88" aria-label="Vocal waveform"></canvas><span id="waveform-vocal-playhead" class="waveform-playhead"></span></div><label class="volume-control"><span>Volume</span><input id="vocal-volume" type="range" min="0" max="1" value="1" step="0.01" aria-label="Vocal volume"></label></section>
+            <section class="track-panel music-track"><div class="track-header"><div><b>02</b><p><strong id="music-control-heading">Music / Instrumental</strong><small>Supplemental stem</small></p></div><button id="music-mute" class="icon-button" type="button">Mute music</button></div><div class="waveform-wrap"><canvas id="waveform-music" width="900" height="88" aria-label="Music waveform"></canvas><span id="waveform-music-playhead" class="waveform-playhead"></span></div><label class="volume-control"><span>Volume</span><input id="music-volume" type="range" min="0" max="1" value="1" step="0.01" aria-label="Music volume"></label></section>
+          </div>
+          <div class="transport-console"><div class="transport-buttons"><button id="play" class="transport-button primary" type="button" disabled aria-label="Play">▶</button><button id="pause" class="transport-button" type="button" disabled aria-label="Pause">Ⅱ</button><button id="stop" class="transport-button" type="button" disabled aria-label="Stop">■</button></div><div class="timeline"><input id="seek" type="range" min="0" max="0" value="0" step="0.01" aria-label="Seek playback position"><output id="time">0:00 / 0:00</output></div><label class="master-volume"><span>Master</span><input id="master-volume" type="range" min="0" max="1" value="1" step="0.01" aria-label="Master volume"></label></div>
+        </section>
+      </section>
+
+      <section class="app-view hidden" data-view="extract" aria-labelledby="extract-heading">
+        <header class="view-header"><p class="eyebrow"><i></i>Recover stored content</p><h2 id="extract-heading">Extract</h2><p>Download active VMA streams without source separation or unsupported conversion.</p></header>
+        <div id="extract-empty" class="empty-state"><b>⇩</b><h3>No VMA is active</h3><p>Open a container first.</p><a class="button primary" href="#/open" data-route="open">Open VMA</a></div>
+        <section id="extract-panel" class="workflow-card hidden"><div class="panel-heading"><div><p class="panel-kicker">Available downloads</p><h3>Original streams</h3></div><span class="validation-badge neutral">Format aware</span></div><div id="v1-extract-actions" class="extract-grid"><a id="extract-vocal" class="download extract-card"><b>⇩</b><strong>Vocal</strong><small>Canonical PCM WAV</small></a><a id="extract-music" class="download extract-card"><b>⇩</b><strong>Music / Instrumental</strong><small>Canonical PCM WAV</small></a><a id="extract-all" class="download extract-card featured"><b>⇩</b><strong>Both tracks</strong><small>Download ZIP archive</small></a></div><div id="v2-extract-list" class="extract-grid hidden"></div><p id="extract-status" class="status" aria-live="polite"></p></section>
+      </section>
+
+      <section class="app-view hidden" data-view="format" aria-labelledby="format-heading">
+        <header class="view-header"><p class="eyebrow"><i></i>Versioned contracts</p><h2 id="format-heading">VMA Format Guide</h2><p>VMA is a container, not a codec and not an AI separator.</p></header>
+        <div class="guide-grid"><article class="guide-card"><b>V1</b><p class="panel-kicker">PCM representation</p><h3>Canonical WAV workflow</h3><p>Stores PCM samples from two valid RIFF/WAVE sources with timing and audio properties.</p><ul><li>Mono or stereo PCM WAV</li><li>8, 16, 24, or 32-bit PCM</li><li>Synchronized playback</li><li>Canonical WAV extraction</li></ul></article><article class="guide-card teal-guide"><b>V2</b><p class="panel-kicker">Opaque representation</p><h3>Original payload preservation</h3><p>Stores accepted source bytes without decoding or transcoding.</p><ul><li>Exact supplied payload bytes</li><li>Format and role descriptors</li><li>Direct per-stream extraction</li><li>Codec-dependent preview</li></ul></article></div>
+        <div class="info-box"><strong>Important limitation</strong><span>A filename cannot guarantee browser decoding. VMA does not derive stems from mixed recordings.</span></div>
+      </section>
+
+      <section class="app-view hidden" data-view="help" aria-labelledby="help-heading">
+        <header class="view-header"><p class="eyebrow"><i></i>Practical guidance</p><h2 id="help-heading">Help / FAQ</h2><p>Answers about containers, playback, security, and local sessions.</p></header>
+        <div class="faq-list"><details open><summary>What is a VMA file?</summary><p>A versioned container keeping separate audio payloads, roles, timing, and metadata together.</p></details><details><summary>How do I create one?</summary><p>Choose Vocal and Music / Instrumental sources. PCM WAV pairs create V1; other accepted files create V2.</p></details><details><summary>How is my audio handled?</summary><p>No account is required. Audio is processed in temporary, process-local storage; inactive sessions expire after two hours and cleanup runs periodically. Use Delete session to revoke the active session immediately. A server restart also removes this ephemeral state.</p></details><details><summary>Why will a V2 stream not play?</summary><p>The current browser may not decode its codec. The exact source remains downloadable.</p></details><details><summary>Does VMA separate vocals?</summary><p>No. Supply stems that already exist separately.</p></details><details><summary>Will navigation stop playback?</summary><p>No. Workspace navigation preserves the active client session and playback.</p></details></div>
+      </section>
+    </main>
+    <footer class="app-footer"><span>VMA browser workspace</span><span>Anonymous temporary sessions · V1/V2 aware · No source separation</span></footer>
+  </div>
+</div>
+<script src="/js/app.js?v=0.5.0"></script>
 </body>
 </html>

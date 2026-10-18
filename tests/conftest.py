@@ -1,3 +1,4 @@
+import os
 import sys
 import wave
 import json
@@ -5,6 +6,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
+
+# Application startup requires an explicit mode. Tests opt into their own mode
+# before test modules import the singleton FastAPI application.
+os.environ.setdefault("VMA_ENVIRONMENT", "test")
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "backend"))
