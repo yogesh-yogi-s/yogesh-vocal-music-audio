@@ -190,6 +190,12 @@ jobs:
                   [str(executable), "-r", lock, "--format=json", "--progress-spinner=off"],
                   check=False, capture_output=True, text=True,
               )
+              if not result.stdout.strip():
+                  detail = " | ".join(result.stderr.splitlines()[:3])[:400]
+                  raise SystemExit(
+                      f"pip-audit produced no JSON for {lock} (exit {result.returncode}); "
+                      f"diagnostic: {detail or 'no stderr'}"
+                  )
               try:
                   report = json.loads(result.stdout)
                   vulnerabilities = [
