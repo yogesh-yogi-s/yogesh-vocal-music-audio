@@ -272,8 +272,7 @@ jobs:
               for finding in vulnerabilities
           )
           print(f"Trivy: {len(vulnerabilities)} total vulnerabilities; {high_critical} HIGH/CRITICAL")
-          if high_critical:
-              raise SystemExit("Trivy threshold exceeded: zero HIGH/CRITICAL required")
+          threshold_failed = high_critical > 0
 
           syft = subprocess.run(
               ["docker", "run", "--rm", "-v", "/var/run/docker.sock:/var/run/docker.sock",
@@ -294,6 +293,8 @@ jobs:
               f"SPDX SBOM: valid {sbom['spdxVersion']}, {len(packages)} packages; "
               f"bound to tested image ID {image_id}; kept in memory only"
           )
+          if threshold_failed:
+              raise SystemExit("Trivy threshold exceeded: zero HIGH/CRITICAL required")
           PY
 
           # Scope/threshold documentation: Trivy scans vulnerabilities in the
