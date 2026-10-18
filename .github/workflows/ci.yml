@@ -111,8 +111,15 @@ jobs:
           port="$(docker port "$container" 8000/tcp | sed 's/.*://')"
           ready=false
           for attempt in $(seq 1 30); do
-            if [ "$(docker inspect --format '{{.State.Health.Status}}' "$container")" = healthy ]; then
+            health_status="$(docker inspect --format '{{.State.Health.Status}}' "$container")"
+            if [ "$health_status" = healthy ]; then
               ready=true
+              break
+            fi
+            if [ "$health_status" = unhealthy ]; then
+              echo "Container healthcheck failed; startup diagnostics follow."
+              docker inspect --format '{{json .State.Health}}' "$container"
+              docker logs "$container"
               break
             fi
             sleep 2
