@@ -76,6 +76,9 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
 
       # Use only synthetic example.test production settings. No secrets or
       # external service are needed. Reports and the SPDX document stay under
@@ -172,6 +175,12 @@ jobs:
           python3 -m venv "$RUNNER_TEMP/pip-audit-venv"
           "$RUNNER_TEMP/pip-audit-venv/bin/python" -m pip install --disable-pip-version-check 'pip-audit==2.10.1'
           "$RUNNER_TEMP/pip-audit-venv/bin/pip-audit" --version
+          python3 -m venv "$RUNNER_TEMP/vma-runtime"
+          python3 -m venv "$RUNNER_TEMP/vma-development"
+          "$RUNNER_TEMP/vma-runtime/bin/python" -m pip install --disable-pip-version-check -r requirements.lock
+          "$RUNNER_TEMP/vma-development/bin/python" -m pip install --disable-pip-version-check -r requirements-dev.lock
+          echo "RUNTIME_SITE_PACKAGES=$("$RUNNER_TEMP/vma-runtime/bin/python" -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')" >> "$GITHUB_ENV"
+          echo "DEVELOPMENT_SITE_PACKAGES=$("$RUNNER_TEMP/vma-development/bin/python" -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')" >> "$GITHUB_ENV"
 
       - name: Audit runtime and development locks (zero known vulnerabilities)
         shell: bash
@@ -185,15 +194,19 @@ jobs:
 
           executable = Path(os.environ["RUNNER_TEMP"]) / "pip-audit-venv/bin/pip-audit"
           failed = False
-          for lock in ("requirements.lock", "requirements-dev.lock"):
+          environments = (
+              ("requirements.lock hash-installed environment", os.environ["RUNTIME_SITE_PACKAGES"]),
+              ("requirements-dev.lock hash-installed environment", os.environ["DEVELOPMENT_SITE_PACKAGES"]),
+          )
+          for label, site_packages in environments:
               result = subprocess.run(
-                  [str(executable), "-r", lock, "--format=json", "--progress-spinner=off"],
+                  [str(executable), "--path", site_packages, "--format=json", "--progress-spinner=off"],
                   check=False, capture_output=True, text=True,
               )
               if not result.stdout.strip():
                   detail = " | ".join(result.stderr.splitlines()[:3])[:400]
                   raise SystemExit(
-                      f"pip-audit produced no JSON for {lock} (exit {result.returncode}); "
+                      f"pip-audit produced no JSON for {label} (exit {result.returncode}); "
                       f"diagnostic: {detail or 'no stderr'}"
                   )
               try:
@@ -204,10 +217,10 @@ jobs:
                       for vulnerability in dependency.get("vulns", [])
                   ]
               except (json.JSONDecodeError, KeyError, TypeError) as error:
-                  raise SystemExit(f"pip-audit failed to produce valid JSON for {lock}: {error}")
-              print(f"{lock}: {len(vulnerabilities)} known vulnerabilities")
+                  raise SystemExit(f"pip-audit failed to produce valid JSON for {label}: {error}")
+              print(f"{label}: {len(vulnerabilities)} known vulnerabilities")
               if result.returncode not in (0, 1):
-                  raise SystemExit(f"pip-audit execution failed for {lock} (exit {result.returncode})")
+                  raise SystemExit(f"pip-audit execution failed for {label} (exit {result.returncode})")
               failed |= bool(vulnerabilities)
           if failed:
               raise SystemExit("pip-audit threshold exceeded: expected zero known vulnerabilities")
