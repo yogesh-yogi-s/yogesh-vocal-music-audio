@@ -462,7 +462,7 @@ if($Mode -eq "quick"){
                 Add-Check $Gates.D.Checks "Docker engine" "BLOCKED" $Gates.D.Reason $version
             }else{
                 Add-Tool "docker" $DockerPath "See docker-version.log"
-                $base="python:3.13.16-slim-trixie@sha256:70729b46c69b4f1e97c4822c1af3df53a1476cf5ddc6c087c0c10bc3a5678c2f"
+                $base="python:3.13.16-slim-bookworm@sha256:a1165e272e578941b84abc79e4ab38a0305cd12803a5c4247979ac7655f4d641"
                 $cached=Invoke-Step "docker-base-cache" $DockerPath @("image","inspect",$base)
                 if(-not $AllowNetwork -and $cached.ExitCode -ne 0){
                     Set-Gate D "BLOCKED" "Pinned base image is not cached and network was not authorized"

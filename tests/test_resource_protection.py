@@ -539,8 +539,8 @@ def test_expiry_cleanup_never_removes_an_active_session(monkeypatch):
 def test_docker_image_declares_non_root_runtime_and_dedicated_temp_directory():
     dockerfile = (app_main.ROOT / "Dockerfile").read_text("utf-8")
     assert (
-        "FROM python:3.13.16-slim-trixie@sha256:"
-        "70729b46c69b4f1e97c4822c1af3df53a1476cf5ddc6c087c0c10bc3a5678c2f\n"
+        "FROM python:3.13.16-slim-bookworm@sha256:"
+        "a1165e272e578941b84abc79e4ab38a0305cd12803a5c4247979ac7655f4d641\n"
         in dockerfile
     )
     assert "--upgrade pip" not in dockerfile
