@@ -70,7 +70,7 @@ def resolve_format_metadata(
     content_type: str | None = None,
 ) -> tuple[int, str, str, str]:
     """Inspect file bytes and name to resolve (format_id, basename, media_type, file_extension)."""
-    raw_name = Path(source_filename or path.name).name.strip()
+    raw_name = Path((source_filename or path.name).replace("\\", "/")).name.strip()
     basename = raw_name if raw_name else path.name
     # Ensure basename has no path separators, null bytes, and is valid UTF-8
     basename = basename.replace("/", "_").replace("\\", "_").replace("\x00", "")
