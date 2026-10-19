@@ -122,12 +122,13 @@ jobs:
                       severity,
                       result.get("Type", ""),
                       result.get("Target", ""),
+                      finding.get("PkgPath") or "-",
                   ))
 
           rows.sort(key=lambda row: (row[4], row[0], row[1], row[5], row[6]))
           print(f"HIGH/CRITICAL findings: {len(rows)}")
           writer = csv.writer(sys.stdout, delimiter="\t", lineterminator="\n")
-          writer.writerow(("CVE", "Package", "Installed", "Fixed", "Severity", "Type", "Target"))
+          writer.writerow(("CVE", "Package", "Installed", "Fixed", "Severity", "Type", "Target", "PackagePath"))
           writer.writerows(rows)
           if rows:
               raise SystemExit(1)
