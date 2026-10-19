@@ -145,3 +145,61 @@ def test_reader_rejects_corrupt_containers_cleanly(tmp_path, corruption, expecte
     path.write_bytes(raw)
     with pytest.raises(VMAError, match=expected_message):
         read_vma(path)
+
+
+# ---------------------------------------------------------------------------
+# Step 5: codec and stream-type error separation (VMA v0.2)
+# ---------------------------------------------------------------------------
+
+def _stream_entry_offset(vma_bytes: bytes, stream_index: int) -> int:
+    """Return the byte offset of stream entry `stream_index` (0-based) in raw VMA bytes."""
+    metadata_size = HEADER_STRUCT.unpack_from(vma_bytes)[5]
+    return HEADER_SIZE + metadata_size + stream_index * STREAM_ENTRY_SIZE
+
+
+def test_unknown_type_id_produces_stream_type_error(tmp_path, wav_pair):
+    """A stream with an unknown type_id must produce 'unsupported stream type' — not a codec error."""
+    vocal, music, *_ = wav_pair
+    vma = create_vma(vocal, music, tmp_path / "bad_type.vma")
+    raw = bytearray(vma.read_bytes())
+    entry_offset = _stream_entry_offset(bytes(raw), 0)
+    # type_id is field index 1 (uint16) at byte offset 4 within the stream entry
+    struct.pack_into("<H", raw, entry_offset + 4, 0xFFFF)
+    vma.write_bytes(raw)
+    with pytest.raises(VMAError, match="unsupported stream type"):
+        read_vma(vma)
+
+
+def test_unknown_codec_id_produces_codec_error(tmp_path, wav_pair):
+    """A stream with an unknown codec_id must produce 'unknown codec identifier' — not a type error."""
+    vocal, music, *_ = wav_pair
+    vma = create_vma(vocal, music, tmp_path / "bad_codec.vma")
+    raw = bytearray(vma.read_bytes())
+    entry_offset = _stream_entry_offset(bytes(raw), 0)
+    # codec_id is field index 2 (uint16) at byte offset 6 within the stream entry
+    struct.pack_into("<H", raw, entry_offset + 6, 0xFFFF)
+    vma.write_bytes(raw)
+    with pytest.raises(VMAError, match="unknown codec identifier"):
+        read_vma(vma)
+
+
+def test_known_but_unsupported_codec_produces_unsupported_error(tmp_path, wav_pair):
+    """A codec_id that is valid in the Codec enum but not PCM_WAV_LE must produce 'unsupported VMA codec'.
+
+    This test uses codec value 0 which must be a known non-PCM entry or we skip.
+    The key invariant is that the 'unsupported VMA codec' branch is distinct
+    from the 'unknown codec identifier' branch.
+    """
+    from vma.models import Codec as _Codec
+    non_pcm = [c for c in _Codec if c is not _Codec.PCM_WAV_LE]
+    if not non_pcm:
+        pytest.skip("No non-PCM codec values in the Codec enum to test with")
+    target_codec = non_pcm[0]
+    vocal, music, *_ = wav_pair
+    vma = create_vma(vocal, music, tmp_path / "non_pcm_codec.vma")
+    raw = bytearray(vma.read_bytes())
+    entry_offset = _stream_entry_offset(bytes(raw), 0)
+    struct.pack_into("<H", raw, entry_offset + 6, int(target_codec))
+    vma.write_bytes(raw)
+    with pytest.raises(VMAError, match="unsupported VMA codec"):
+        read_vma(vma)

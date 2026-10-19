@@ -56,4 +56,4 @@ The playback start time for a stream is `start_sample / sample_rate`. A stream d
 
 ## Required validation
 
-Readers must reject invalid magic/version, non-zero reserved fields, inconsistent header sizing, stream count other than two, entry size other than 64, metadata larger than 64 KiB or invalid JSON, unsupported enums/audio formats, zero frame count, negative start samples, data-size/frame-size mismatch, data before `header_size`, ranges beyond the physical file, duplicate IDs/types, and overlapping data ranges. The implementation also limits VMA files to 2 GiB and sample rates to 384 kHz.
+Readers must reject invalid magic/version, non-zero reserved fields, inconsistent header sizing, stream count other than two, entry size other than 64, metadata larger than 64 KiB or invalid JSON, unsupported stream types, unknown or unsupported codecs, unsupported audio formats, zero frame count, negative start samples, data-size/frame-size mismatch, data before `header_size`, ranges beyond the physical file, duplicate IDs/types, and overlapping data ranges. The implementation also limits VMA files to 2 GiB and sample rates to 384 kHz.

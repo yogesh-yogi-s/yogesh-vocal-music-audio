@@ -55,9 +55,13 @@ def _parse_stream(raw: bytes, header_size: int, file_size: int) -> StreamInfo:
     if stream_id == 0 or reserved != b"\0" * 16:
         raise VMAError("invalid VMA stream identifier or reserved bytes")
     try:
-        stream_type, codec = StreamType(type_id), Codec(codec_id)
+        stream_type = StreamType(type_id)
     except ValueError as exc:
-        raise VMAError("VMA contains an unsupported stream type or codec") from exc
+        raise VMAError("VMA contains an unsupported stream type") from exc
+    try:
+        codec = Codec(codec_id)
+    except ValueError as exc:
+        raise VMAError("VMA contains an unknown codec identifier") from exc
     if codec is not Codec.PCM_WAV_LE:
         raise VMAError("unsupported VMA codec")
     audio = _validate_pcm_descriptor(

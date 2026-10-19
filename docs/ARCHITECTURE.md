@@ -28,7 +28,7 @@ All ownership keys, limiter state, active-work counts, storage reservations, and
 
 ## Container layers
 
-- **V1 (`backend/vma/`)** is frozen and contains the PCM WAV parser, V1 binary reader/writer/validator, WAV reconstruction extractor, and V1 frame-offset support.
+- **V1 (`backend/vma/`)** is frozen and contains the PCM WAV parser, V1 binary reader/writer/validator (with distinct error separation for unsupported stream types, unknown codec identifiers, and unsupported codecs), WAV reconstruction extractor, and V1 frame-offset support.
 - **V2 (`backend/vma/v2/`)** is frozen and stores original stream payload bytes with generic descriptors. It reads, validates, and extracts bytes directly without media inspection or decoding.
 - **Version dispatch (`backend/vma/dispatch.py`)** selects the V1 or V2 reader from the shared magic and version field.
 - **Format utilities (`backend/vma/formats/`)** provide the append-only FORMAT_ID registry plus limited identity/probe helpers. They do not establish decoder capability.

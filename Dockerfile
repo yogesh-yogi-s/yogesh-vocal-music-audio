@@ -12,7 +12,11 @@ ENV PYTHONUNBUFFERED=1 \
 WORKDIR /app
 
 COPY requirements.lock ./
-RUN python -m pip install --no-cache-dir -r requirements.lock
+RUN python -m pip install --no-cache-dir -r requirements.lock \
+    && python -m pip uninstall --yes pip \
+    && rm /usr/local/lib/python3.13/ensurepip/_bundled/pip-26.2.1-py3-none-any.whl \
+    && test ! -d /usr/local/lib/python3.13/site-packages/pip \
+    && test ! -e /usr/local/lib/python3.13/ensurepip/_bundled/pip-26.2.1-py3-none-any.whl
 
 COPY backend ./backend
 COPY frontend ./frontend
