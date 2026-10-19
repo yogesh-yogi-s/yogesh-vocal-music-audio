@@ -294,6 +294,9 @@ jobs:
               f"bound to tested image ID {image_id}; kept in memory only"
           )
           if threshold_failed:
+              for finding in vulnerabilities:
+                  if finding.get("Severity") in {"HIGH", "CRITICAL"}:
+                      print(f"FAILING FINDING: {finding.get('VulnerabilityID')} | {finding.get('PkgName')} | {finding.get('InstalledVersion')} | Fixed: {finding.get('FixedVersion', '-')}")
               raise SystemExit("Trivy threshold exceeded: zero HIGH/CRITICAL required")
           PY
 
