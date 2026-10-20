@@ -4,6 +4,10 @@ __pycache__/
 .pytest_cache_local/
 .pytest_tmp/
 .venv/
+/desktop/windows/.venv-build/
+/desktop/windows/node_modules/
+/desktop/windows/dist/
+/desktop/windows/build/
 # Packaging build artifacts
 build/
 dist/
