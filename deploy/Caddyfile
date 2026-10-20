@@ -1,0 +1,20 @@
+{
+    servers {
+        timeouts {
+            read_body 2h
+            read_body_idle 10m
+            write 2h
+        }
+    }
+}
+
+{$DOMAIN} {
+    request_body {
+        max_size 1050673152
+    }
+    reverse_proxy vma:8000 {
+        transport http {
+            response_header_timeout 2h
+        }
+    }
+}

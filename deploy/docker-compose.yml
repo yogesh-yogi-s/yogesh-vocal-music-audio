@@ -1,0 +1,53 @@
+services:
+  vma:
+    build:
+      context: ..
+    image: vma:local-release
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    user: "10001:10001"
+    environment:
+      VMA_ENVIRONMENT: ${VMA_ENVIRONMENT:?set VMA_ENVIRONMENT in .env}
+      VMA_TRUSTED_HOSTS: ${VMA_TRUSTED_HOSTS:?set VMA_TRUSTED_HOSTS in .env}
+      VMA_ALLOWED_ORIGINS: ${VMA_ALLOWED_ORIGINS:?set VMA_ALLOWED_ORIGINS in .env}
+      VMA_HEALTHCHECK_HOST: ${VMA_HEALTHCHECK_HOST:?set VMA_HEALTHCHECK_HOST in .env}
+      VMA_TRUSTED_PROXIES: ${VMA_TRUSTED_PROXIES:?set VMA_TRUSTED_PROXIES in .env}
+      VMA_MAX_PROCESS_TEMP_BYTES: ${VMA_MAX_PROCESS_TEMP_BYTES:?set VMA_MAX_PROCESS_TEMP_BYTES in .env}
+    volumes:
+      - type: bind
+        source: ${VMA_TEMP_DIR:?set VMA_TEMP_DIR in .env}
+        target: /tmp/vma
+    networks:
+      app_net:
+        ipv4_address: 172.30.80.3
+
+  caddy:
+    image: caddy:2.10.2@sha256:c3d7ee5d2b11f9dc54f947f68a734c84e9c9666c92c88a7f30b9cba5da182adb
+    restart: unless-stopped
+    depends_on:
+      vma:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN in .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      app_net:
+        ipv4_address: 172.30.80.2
+
+networks:
+  app_net:
+    ipam:
+      config:
+        - subnet: 172.30.80.0/24
+
+volumes:
+  caddy_data:
+  caddy_config:

@@ -23,18 +23,14 @@ RUN apt-get update \
 COPY backend ./backend
 COPY frontend ./frontend
 
-RUN groupadd --system vma \
-    && useradd --system --gid vma --home-dir /nonexistent --shell /usr/sbin/nologin vma \
+RUN groupadd --system --gid 10001 vma \
+    && useradd --system --uid 10001 --gid vma --home-dir /nonexistent --shell /usr/sbin/nologin vma \
     && mkdir -p /tmp/vma \
     && chown vma:vma /tmp/vma \
     && chmod 700 /tmp/vma
 
-# Uploads and derived session files are held in a temporary directory that the
-# application creates on startup; mount nothing and the state is intentionally
-# ephemeral. Run with a bounded tmpfs such as
-# `--tmpfs /tmp/vma:rw,noexec,nosuid,size=8g` when the deployment runtime
-# supports it; the application independently rejects work above its configured
-# process-local temporary-storage budget.
+# Uploads and sessions use /tmp/vma. The deploy pack mounts a disk-backed,
+# size-capped filesystem here; the application also enforces a process budget.
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \

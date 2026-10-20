@@ -76,9 +76,20 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
+
+      - name: Build both release image platforms without publishing
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker buildx build --platform linux/amd64,linux/arm64 \
+            --output "type=oci,dest=$RUNNER_TEMP/vma-multiarch.oci" .
+          test -s "$RUNNER_TEMP/vma-multiarch.oci"
+          echo "Built linux/amd64 and linux/arm64 OCI image archive."
 
       # Use only synthetic example.test production settings. No secrets or
       # external service are needed. Reports and the SPDX document stay under

@@ -560,4 +560,8 @@ def test_docker_image_declares_non_root_runtime_and_dedicated_temp_directory():
     assert "os.getenv('VMA_TRUSTED_HOSTS'" not in dockerfile
     assert "TMPDIR=/tmp/vma" in dockerfile
     assert "USER vma" in dockerfile
-    assert "--tmpfs /tmp/vma:rw,noexec,nosuid,size=8g" in dockerfile
+    compose = (app_main.ROOT / "deploy" / "docker-compose.yml").read_text("utf-8")
+    assert "target: /tmp/vma" in compose
+    assert "VMA_MAX_PROCESS_TEMP_BYTES" in compose
+    assert "read_only: true" in compose
+    assert "cap_drop: [ALL]" in compose
