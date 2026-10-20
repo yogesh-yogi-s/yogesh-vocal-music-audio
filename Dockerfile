@@ -1,6 +1,6 @@
 # Experimental Alpine runtime candidate. The CI container-security job
 # must pass before this image can replace the release image.
-FROM python:3.13-alpine3.24
+FROM python:3.13-alpine3.24@sha256:2d9aefe2fef018a7eb2c13064c89c71929800fd2e5dccdbf52ea5da5bb8d929a
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
