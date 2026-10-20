@@ -213,14 +213,18 @@ dependency ranges. Reproducible installs use `requirements.lock` and
 require wheels, and enforce SHA-256 hashes. The Docker image installs only the
 runtime lock.
 
-To update the locks, resolve the direct declarations for both Windows x86-64
-and the Docker target (CPython 3.13, Linux x86-64/manylinux2014), review release
-notes and published advisories, and capture the selected wheel hashes from
-pip's JSON `--report` output. Include both platform hashes for binary packages,
-retain the platform markers for `colorama` and `uvloop`, then verify clean
-installs with `python -m pip install -r requirements-dev.lock` and the Linux
-runtime lock before accepting the update. Never remove `--require-hashes` or
-silently refresh the lock during an image build.
+To update the locks, resolve the direct declarations for CPython 3.13 on
+Windows x86-64, Linux manylinux2014 x86-64/aarch64, and Alpine musllinux
+x86-64/aarch64. Review release notes and advisories, then capture each selected
+wheel and its SHA-256 from pip's JSON `--report` output or the downloaded wheel
+bytes. For musllinux, include both `musllinux_1_2` and `musllinux_1_1` target
+tags, since some pinned packages publish only the latter. Include all platform
+hashes for binary packages, retain the platform markers for `colorama` and
+`uvloop`, then verify clean installs with `python -m pip install -r
+requirements-dev.lock` and platform-targeted `pip download --no-deps -r
+requirements.lock --only-binary=:all: --platform ... --python-version 3.13`.
+Finally verify an actual image build on each platform before release. Never
+remove `--require-hashes` or silently refresh the lock during an image build.
 
 The Phase 4D hash-locked Python 3.13 verification completed with **448 tests
 passing, 0 failed, 4 skipped, and 1 deprecation warning**. The four skips are

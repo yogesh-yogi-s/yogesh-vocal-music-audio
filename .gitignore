@@ -9,3 +9,4 @@ dist/
 *.egg-info/
 # Local temporary artifacts and generator fixtures
 tmp/
+deploy/.env
