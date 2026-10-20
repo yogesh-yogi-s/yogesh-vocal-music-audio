@@ -9,3 +9,6 @@ dist/
 *.egg-info/
 # Local temporary artifacts and generator fixtures
 tmp/
+
+.wheelhouse/
+.wheel-specs.txt

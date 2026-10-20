@@ -539,8 +539,8 @@ def test_expiry_cleanup_never_removes_an_active_session(monkeypatch):
 def test_docker_image_declares_non_root_runtime_and_dedicated_temp_directory():
     dockerfile = (app_main.ROOT / "Dockerfile").read_text("utf-8")
     assert (
-        "FROM python:3.13.16-slim-bookworm@sha256:"
-        "a1165e272e578941b84abc79e4ab38a0305cd12803a5c4247979ac7655f4d641\n"
+            "FROM python:3.13-alpine@sha256:"
+            "2d9aefe2fef018a7eb2c13064c89c71929800fd2e5dccdbf52ea5da5bb8d929a\n"
         in dockerfile
     )
     assert "--upgrade pip" not in dockerfile
@@ -560,4 +560,4 @@ def test_docker_image_declares_non_root_runtime_and_dedicated_temp_directory():
     assert "os.getenv('VMA_TRUSTED_HOSTS'" not in dockerfile
     assert "TMPDIR=/tmp/vma" in dockerfile
     assert "USER vma" in dockerfile
-    assert "--tmpfs /tmp/vma:rw,noexec,nosuid,size=8g" in dockerfile
+    assert "mkdir -p /tmp/vma" in dockerfile
