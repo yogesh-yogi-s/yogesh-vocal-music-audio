@@ -46,6 +46,10 @@ The local application accepts two non-empty uploads of any file type. Accepted i
 
 Requirements: Python 3.12+ (tested with Python 3.13).
 
+On Windows with Python 3.13, double-click **Start VMA.cmd** in the repository folder. The launcher creates an ignored `.venv` if needed, installs the hash-locked dependencies on first run, and opens `http://127.0.0.1:8000` in your browser. Keep its terminal window open while using VMA; press Ctrl+C there to stop it. It listens only on this computer. Local operation uses the normal 500 MiB per-file limit and 8 GiB process temp budget unless you explicitly set their environment variables. No hosting account or Docker is needed.
+
+For manual startup or other operating systems:
+
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
