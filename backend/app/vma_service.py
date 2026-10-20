@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 from datetime import UTC, datetime
 from pathlib import Path
@@ -34,7 +35,23 @@ from backend.vma.v2.constants import (
 from backend.vma.v2.format_info import FILE_EXTENSION, MEDIA_TYPE, SOURCE_FILENAME, parse_format_info
 from backend.vma.v2.models import V2File
 
-MAX_UPLOAD_BYTES = 500 * 1024 * 1024
+PRODUCT_MAX_UPLOAD_BYTES = 500 * 1024 * 1024
+
+
+def _configured_upload_limit() -> int:
+    raw = os.getenv("VMA_MAX_UPLOAD_BYTES")
+    if raw is None:
+        return PRODUCT_MAX_UPLOAD_BYTES
+    try:
+        limit = int(raw)
+    except ValueError as exc:
+        raise RuntimeError("VMA_MAX_UPLOAD_BYTES must be between 1 byte and 500 MiB") from exc
+    if not 1 <= limit <= PRODUCT_MAX_UPLOAD_BYTES:
+        raise RuntimeError("VMA_MAX_UPLOAD_BYTES must be between 1 byte and 500 MiB")
+    return limit
+
+
+MAX_UPLOAD_BYTES = _configured_upload_limit()
 MAX_SOURCE_FILENAME_BYTES = 255
 NANOSECONDS_PER_SECOND = 1_000_000_000
 _MEDIA_TYPE_TOKEN_CHARS = frozenset(
@@ -53,8 +70,13 @@ _ROLE_NAMES = {
 
 async def store_upload(upload: UploadFile, destination: Path) -> Path:
     """Save an upload under an application-chosen filename and enforce a size limit."""
+    limit_text = (
+        f"{MAX_UPLOAD_BYTES // (1024 * 1024)} MiB"
+        if MAX_UPLOAD_BYTES % (1024 * 1024) == 0
+        else f"{MAX_UPLOAD_BYTES} bytes"
+    )
     if upload.size is not None and upload.size > MAX_UPLOAD_BYTES:
-        raise HTTPException(413, "uploads are limited to 500 MiB each")
+        raise HTTPException(413, f"uploads are limited to {limit_text} each")
 
     total = 0
     try:
@@ -62,7 +84,7 @@ async def store_upload(upload: UploadFile, destination: Path) -> Path:
             while chunk := await upload.read(1024 * 1024):
                 total += len(chunk)
                 if total > MAX_UPLOAD_BYTES:
-                    raise HTTPException(413, "uploads are limited to 500 MiB each")
+                    raise HTTPException(413, f"uploads are limited to {limit_text} each")
                 output.write(chunk)
     except BaseException:
         destination.unlink(missing_ok=True)

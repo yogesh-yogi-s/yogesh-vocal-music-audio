@@ -29,6 +29,33 @@ UPLOAD_ROUTES = (
 )
 
 
+def test_configured_upload_limit_keeps_product_ceiling(monkeypatch):
+    monkeypatch.delenv("VMA_MAX_UPLOAD_BYTES", raising=False)
+    assert vma_service._configured_upload_limit() == 500 * resource_control.MIB
+
+    monkeypatch.setenv("VMA_MAX_UPLOAD_BYTES", str(10 * resource_control.MIB))
+    assert vma_service._configured_upload_limit() == 10 * resource_control.MIB
+
+    for invalid in ("0", str(500 * resource_control.MIB + 1), "invalid"):
+        monkeypatch.setenv("VMA_MAX_UPLOAD_BYTES", invalid)
+        with pytest.raises(RuntimeError, match="VMA_MAX_UPLOAD_BYTES"):
+            vma_service._configured_upload_limit()
+
+
+def test_small_preview_budget_allows_demo_streams_with_lower_upload_ceiling(monkeypatch):
+    monkeypatch.setattr(vma_service, "MAX_UPLOAD_BYTES", 10 * resource_control.MIB)
+    monkeypatch.setattr(resource_control, "MAX_PROCESS_TEMP_BYTES", 200 * resource_control.MIB)
+
+    with TestClient(app) as client:
+        opened = client.post("/api/demo")
+        assert opened.status_code == 200, opened.text
+        session = opened.json()["session_id"]
+        for kind in ("vocal", "music"):
+            response = client.get(f"/api/vma/{session}/stream/{kind}")
+            assert response.status_code == 200, response.text
+            assert response.content.startswith(b"RIFF")
+
+
 @pytest.mark.parametrize(("path", "file_count"), UPLOAD_ROUTES)
 def test_content_length_limits_reject_every_multipart_route_before_parsing(
     monkeypatch, path, file_count

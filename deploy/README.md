@@ -71,6 +71,19 @@ already in flight. Keep this process budget below the mounted volume's size if
 you resize it. Expiring application sessions are stored here; plan to monitor
 free space and remove stale data only when the stack is stopped.
 
+## Small Render Free preview
+
+Render Free can build the root `Dockerfile` from the release branch with the
+repository root directory left blank. It does not provide the VM deployment's
+8 GiB capped volume, so use it only for a small-file preview. Set
+`VMA_TEMP_ROOT=/tmp` and `TMPDIR=/tmp` if `/tmp/vma` is absent at runtime. Set
+`VMA_MAX_UPLOAD_BYTES=10485760` (10 MiB) with
+`VMA_MAX_PROCESS_TEMP_BYTES=209715200` (200 MiB); request and extraction
+reservations then fit within that application budget. Keep the production host,
+HTTPS origin, and health-check host set to the exact Render hostname. Free
+instance storage and sessions disappear on restart or spin-down. The full
+500 MiB file limit and durable session availability require a suitable host.
+
 ## Start and check
 
 ```sh

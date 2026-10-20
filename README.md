@@ -149,7 +149,7 @@ State-changing browser routes validate the request origin (and Fetch Metadata wh
 
 ### Resource and abuse limits
 
-The 500 MiB per-file product limit is unchanged. Before multipart parsing, the application rejects a declared or streamed request body above 1,002 MiB for two-source Create requests and 502 MiB for single-file Open, Validate, Info, and stateless Extract requests. The additional 2 MiB is a multipart-envelope allowance for boundaries, safe filenames, and form fields; it is not additional audio capacity. Try Demo accepts at most a 64 KiB request body. Oversized bodies receive a consistent HTTP 413 response, while the streamed 500 MiB per-file check remains as defense in depth.
+The default per-file limit remains 500 MiB. A small preview deployment can lower it with `VMA_MAX_UPLOAD_BYTES` (bytes), but cannot raise it above 500 MiB. Before multipart parsing, the application rejects a declared or streamed request body above twice the configured file limit plus 2 MiB for two-source Create requests, or the file limit plus 2 MiB for single-file Open, Validate, Info, and stateless Extract requests. The additional 2 MiB is a multipart-envelope allowance for boundaries, safe filenames, and form fields; it is not additional audio capacity. Try Demo accepts at most a 64 KiB request body. Oversized bodies receive a consistent HTTP 413 response, while the streamed per-file check remains as defense in depth.
 
 Default single-process controls are:
 
