@@ -52,6 +52,9 @@ def open_browser_when_ready() -> None:
 
 
 def serve() -> None:
+    # A script launched from scripts/ does not automatically put ROOT on sys.path.
+    # Uvicorn's import string needs ROOT to resolve backend.app.main.
+    sys.path.insert(0, str(ROOT))
     import uvicorn
 
     threading.Thread(target=open_browser_when_ready, daemon=True).start()
