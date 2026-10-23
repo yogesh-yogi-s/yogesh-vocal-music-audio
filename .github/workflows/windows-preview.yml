@@ -1,0 +1,51 @@
+name: Windows preview build
+
+on:
+  push:
+    branches: [codex/windows-desktop]
+    paths:
+      - .github/workflows/windows-preview.yml
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-upload-draft:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: requirements-dev.lock
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Test source
+        run: |
+          python -m pip install -r requirements-dev.lock
+          python -m pytest -q
+      - name: Build and test Windows distribution
+        run: python desktop/windows/build.py
+      - name: Upload to the existing draft preview
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          $tag = 'v0.3.0-windows-preview.1'
+          $release = gh release view $tag --json isDraft,isPrerelease,assets | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0 -or -not $release.isDraft -or -not $release.isPrerelease) {
+            throw 'Expected an existing draft prerelease; refusing to upload elsewhere.'
+          }
+          if ($release.assets.Count -ne 0) {
+            throw 'Draft already has an asset; refusing to overwrite it.'
+          }
+          $archive = 'desktop/windows/dist/VMA-windows-x64.zip'
+          Get-FileHash $archive -Algorithm SHA256 | Format-List Path,Hash
+          gh release upload $tag $archive
+          if ($LASTEXITCODE -ne 0) {
+            throw 'GitHub rejected the Windows preview asset.'
+          }
